@@ -106,13 +106,14 @@ function attachRealistic(){
  if(mode!=='preview'||!el('realisticPreview').checked||!realisticTemplate)return;
  const proxy=previewActors[0];if(!proxy)return;
  const visual=cloneSkeleton(realisticTemplate);
+ visual.updateMatrixWorld(true);
  const bounds=new THREE.Box3().setFromObject(visual),size=new THREE.Vector3(),center=new THREE.Vector3();
  bounds.getSize(size);bounds.getCenter(center);
  if(size.y<.001)return;
- const scale=1.75/size.y;
+ const scale=1.75/size.y*Number(el('soldierScale').value);
  visual.scale.setScalar(scale);
  visual.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
- visual.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
+ visual.traverse(o=>{if(o.isLight)o.visible=false;if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
  realisticActor=new THREE.Group();realisticActor.position.copy(proxy.position);realisticActor.rotation.copy(proxy.rotation);
  realisticActor.add(visual);previewGroup.add(realisticActor);
  proxy.userData.body.visible=false;proxy.userData.badge.visible=false;
@@ -126,6 +127,7 @@ function loadRealistic(){
   realisticLoading=false;realisticTemplate=g.scene;realisticClip=g.animations[0]||null;attachRealistic();
  },undefined,e=>{realisticLoading=false;el('realisticPreview').checked=false;status('Model files not uploaded yet. Use the v0.3.0 asset ZIP.');console.warn('Soldier asset missing',e)});
 }
+el('soldierScale').addEventListener('input',()=>{el('soldierScaleValue').textContent=Math.round(Number(el('soldierScale').value)*100)+'%';if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').checked)loadRealistic();else{removeRealistic();previewBuild()}});
 function previewBuild(){removeRealistic();previewActors.forEach(a=>previewGroup.remove(a));previewActors=[];[['whitePiece','whiteAnim','w',-1.5],['blackPiece','blackAnim','b',1.5]].forEach(([id,aid,color,x])=>{const a=soldier(el(id).value,color);a.position.set(x,.12,0);a.rotation.y=color==='w'?Math.PI/2:-Math.PI/2;setState(a,el(aid).value);previewGroup.add(a);previewActors.push(a)});if(el('realisticPreview').checked&&realisticTemplate)attachRealistic()}
 function setMode(next){mode=next;boardGroup.visible=next==='battle';previewGroup.visible=next==='preview';el('battleControls').classList.toggle('hide',next!=='battle');el('previewControls').classList.toggle('hide',next!=='preview');el('battleBtn').classList.toggle('primary',next==='battle');el('previewBtn').classList.toggle('primary',next==='preview');if(next==='preview'){previewBuild();status('Animation preview studio');if(el('realisticPreview').checked)loadRealistic()}else{removeRealistic();status('Select a piece to move')};resetCamera()}
