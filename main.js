@@ -101,6 +101,48 @@ function resetCamera(){const from=camera.position.clone(),fromTarget=controls.ta
 let realisticTemplate=null,realisticClip=null,realisticMixer=null,realisticActor=null,realisticLoading=false;
 const realisticLoader=new GLTFLoader();
 function removeRealistic(){if(realisticMixer){realisticMixer.stopAllAction();realisticMixer=null}if(realisticActor){previewGroup.remove(realisticActor);realisticActor=null}}
+// Retarget local joint rotations through each rig's rest-pose parent space.
+const BONE_MAP={
+ pelvis:'Hips_01',spine_01:'Spine_02',spine_02:'Spine1_03',spine_03:'Spine2_04',neck_01:'Neck_05',Head:'Head_06',
+ clavicle_l:'LeftShoulder_00',upperarm_l:'LeftArm_035',lowerarm_l:'LeftForeArm_036',hand_l:'LeftHand_037',
+ clavicle_r:'RightShoulder_010',upperarm_r:'RightArm_011',lowerarm_r:'RightForeArm_012',hand_r:'RightHand_013',
+ thigh_l:'LeftUpLeg_064',calf_l:'LeftLeg_065',foot_l:'LeftFoot_066',ball_l:'LeftToeBase_067',
+ thigh_r:'RightUpLeg_059',calf_r:'RightLeg_060',foot_r:'RightFoot_061',ball_r:'RightToeBase_062'
+};
+let animationSource=null,retargetCache=new Map(),animationLoading=false;
+function retargetClip(clip,target){
+ const source=animationSource.scene;source.updateMatrixWorld(true);target.updateMatrixWorld(true);
+ const tracks=[];
+ for(const track of clip.tracks){
+  if(!track.name.endsWith('.quaternion'))continue;
+  const sourceName=track.name.slice(0,-'.quaternion'.length).replace(/^.*\\//,'');
+  const targetName=BONE_MAP[sourceName];if(!targetName)continue;
+  const a=source.getObjectByName(sourceName),b=target.getObjectByName(targetName);
+  if(!a||!b)continue;
+  const aParent=new THREE.Quaternion(),bParent=new THREE.Quaternion();
+  if(a.parent)a.parent.getWorldQuaternion(aParent);
+  if(b.parent)b.parent.getWorldQuaternion(bParent);
+  const transform=bParent.clone().invert().multiply(aParent);
+  const invTransform=transform.clone().invert(),restA=a.quaternion.clone(),restB=b.quaternion.clone();
+  const invRestA=restA.clone().invert(),values=[];
+  for(let i=0;i<track.values.length;i+=4){
+   const q=new THREE.Quaternion().fromArray(track.values,i);
+   const delta=q.multiply(invRestA);
+   const out=transform.clone().multiply(delta).multiply(invTransform).multiply(restB).normalize();
+   values.push(out.x,out.y,out.z,out.w);
+  }
+  tracks.push(new THREE.QuaternionKeyframeTrack(targetName+'.quaternion',track.times,values));
+ }
+ return new THREE.AnimationClip('Retargeted_'+clip.name,clip.duration,tracks);
+}
+function loadAnimationLibrary(){
+ if(animationSource||animationLoading)return;
+ animationLoading=true;
+ realisticLoader.load('./assets/animations/UAL1_Standard.glb',g=>{
+  animationLoading=false;animationSource=g;retargetCache.clear();
+  if(mode==='preview'&&el('realisticPreview').checked)attachRealistic();
+ },undefined,e=>{animationLoading=false;console.warn('Animation library failed to load',e);status('Animation library could not load; celebration remains available')});
+}
 function attachRealistic(){
  removeRealistic();
  if(mode!=='preview'||!el('realisticPreview').checked||!realisticTemplate)return;
@@ -117,14 +159,21 @@ function attachRealistic(){
  realisticActor=new THREE.Group();realisticActor.position.copy(proxy.position);realisticActor.rotation.copy(proxy.rotation);
  realisticActor.add(visual);previewGroup.add(realisticActor);
  proxy.userData.body.visible=false;proxy.userData.badge.visible=false;
- if(realisticClip&&el('realisticAnimation').value==='celebration'){realisticMixer=new THREE.AnimationMixer(visual);realisticMixer.clipAction(realisticClip).play()}
- status(el('realisticAnimation').value==='celebration'?'Celebration dance playing 🕺':'Rigged soldier • neutral pose (combat animations coming next)');
+ const selectedAnimation=el('realisticAnimation').value;
+ let clip=null;
+ if(selectedAnimation==='celebration')clip=realisticClip;
+ else if(animationSource){
+  const original=animationSource.animations.find(a=>a.name===selectedAnimation);
+  if(original)clip=retargetClip(original,visual);
+ }
+ if(clip&&clip.tracks.length){realisticMixer=new THREE.AnimationMixer(visual);const action=realisticMixer.clipAction(clip);if(selectedAnimation==='Death01'){action.setLoop(THREE.LoopOnce,1);action.clampWhenFinished=true}action.play()}
+ status(clip?'Rigged soldier • '+(selectedAnimation==='celebration'?'Celebration dance':selectedAnimation):'Loading combat animation…');
 }
 function loadRealistic(){
- if(realisticTemplate){attachRealistic();return}
+ if(realisticTemplate){attachRealistic();loadAnimationLibrary();return}
  if(realisticLoading)return;realisticLoading=true;status('Loading rigged soldier model…');
  realisticLoader.load('./assets/soldier/scene.gltf',g=>{
-  realisticLoading=false;realisticTemplate=g.scene;realisticClip=g.animations[0]||null;attachRealistic();
+  realisticLoading=false;realisticTemplate=g.scene;realisticClip=g.animations[0]||null;attachRealistic();loadAnimationLibrary();
  },undefined,e=>{realisticLoading=false;el('realisticPreview').checked=false;status('Model files not uploaded yet. Use the v0.3.0 asset ZIP.');console.warn('Soldier asset missing',e)});
 }
 el('realisticAnimation').addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
