@@ -68,5 +68,54 @@ function previewBuild(){previewActors.forEach(a=>previewGroup.remove(a));preview
 function setMode(next){mode=next;boardGroup.visible=next==='battle';previewGroup.visible=next==='preview';el('battleControls').classList.toggle('hide',next!=='battle');el('previewControls').classList.toggle('hide',next!=='preview');el('battleBtn').classList.toggle('primary',next==='battle');el('previewBtn').classList.toggle('primary',next==='preview');if(next==='preview'){previewBuild();status('Animation preview studio')}else status('Select a piece to move');resetCamera()}
 for(const [id,initial] of [['whitePiece','p'],['blackPiece','q']]){for(const [key,name] of Object.entries(TYPES)){const o=document.createElement('option');o.value=key;o.textContent=`${SYMBOL[id==='whitePiece'?'w':'b'][key]} ${name}`;el(id).append(o)}el(id).value=initial;el(id).addEventListener('change',previewBuild)}for(const id of ['whiteAnim','blackAnim']){for(const name of ANIMS){const o=document.createElement('option');o.value=name;o.textContent=name[0].toUpperCase()+name.slice(1);el(id).append(o)}el(id).value=id==='blackAnim'?'targeted':'idle';el(id).addEventListener('change',previewBuild)}
 el('battleBtn').onclick=()=>setMode('battle');el('previewBtn').onclick=()=>setMode('preview');el('cameraBtn').onclick=resetCamera;el('previewCamera').onclick=resetCamera;el('resetBtn').onclick=()=>{if(busy)return;game.reset();syncBoard();clearHighlights();selected=null;setMode('battle');status('New game ready')};el('undoBtn').onclick=()=>{if(busy)return;game.undo();syncBoard();clearHighlights();selected=null;status('Last move undone')};el('icons').onchange=()=>{for(const a of [...actors.values(),...previewActors])a.userData.badge.visible=el('icons').checked};el('testAttack').onclick=async()=>{if(busy)return;busy=true;const [a,b]=previewActors;setState(a,'highlighted');setState(b,'targeted');status('Preview: acquiring target');await cameraFocus(a,b);setState(a,'attacking');await wait(850);effect(a,b,a.userData.type);setState(b,'dying');await wait(1250);previewBuild();resetCamera();status('Preview attack complete');busy=false};
-const clock=new THREE.Clock();function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05),t=performance.now()/1000;for(const a of [...actors.values(),...previewActors]){const u=a.userData;u.age+=dt;const w=u.age;u.body.position.y=0;u.body.rotation.z=0;u.arms.forEach((arm,i)=>arm.rotation.x=(i?-.15:.15));u.legs.forEach(leg=>leg.rotation.x=0);if(u.state==='idle'){u.body.position.y=Math.sin(t*1.7+a.id)*.017;if(u.type==='k')u.body.rotation.y=Math.sin(t*.55)*.28}else if(u.state==='highlighted'){u.body.position.y=Math.sin(t*4)*.035;u.arms[1].rotation.x=-.65}else if(u.state==='targeted'){u.body.rotation.z=Math.sin(t*5)*.065;u.arms[0].rotation.x=-.7}else if(u.state==='moving'){u.legs[0].rotation.x=Math.sin(t*12)*.6;u.legs[1].rotation.x=-Math.sin(t*12)*.6;u.arms[0].rotation.x=-Math.sin(t*12)*.45;u.arms[1].rotation.x=Math.sin(t*12)*.45}else if(u.state==='attacking'){u.arms[1].rotation.x=-1.2;u.body.rotation.z=Math.sin(t*22)*.035}else if(u.state==='dying'){u.body.rotation.z=-Math.min(w*1.5,1.35);u.body.position.y=-Math.min(w*.18,.2)}u.badge.visible=el('icons').checked}controls.update();renderer.render(scene,camera)}
+const clock=new THREE.Clock();
+function animate(){
+requestAnimationFrame(animate);
+const dt=Math.min(clock.getDelta(),.05),t=performance.now()/1000;
+for(const a of [...actors.values(),...previewActors]){
+const u=a.userData;u.age+=dt;
+const w=u.age,cycle=t*2.5+a.id;
+u.body.position.set(0,0,0);u.body.rotation.set(0,0,0);
+for(const arm of u.arms)arm.rotation.set(0,0,0);
+for(const leg of u.legs)leg.rotation.set(0,0,0);
+if(u.state==='idle'){
+u.body.position.y=Math.sin(cycle)*.018;
+u.arms[0].rotation.x=.14;u.arms[1].rotation.x=-.14;
+u.body.rotation.y=Math.sin(t*.6+a.id)*.08;
+}else if(u.state==='highlighted'){
+u.body.position.y=.065+Math.sin(t*5)*.035;
+u.body.rotation.y=Math.sin(t*1.7)*.25;
+u.arms[0].rotation.x=-1.25;u.arms[1].rotation.x=-.85;
+u.arms[0].rotation.z=-.35;
+}else if(u.state==='targeted'){
+u.body.position.y=-.14;
+u.body.rotation.x=.26;
+u.body.rotation.z=Math.sin(t*8)*.06;
+u.arms[0].rotation.x=-1.65;u.arms[1].rotation.x=-1.35;
+u.legs[0].rotation.x=-.65;u.legs[1].rotation.x=.5;
+}else if(u.state==='moving'){
+const stride=Math.sin(t*11);
+u.body.position.y=.08+Math.abs(stride)*.08;
+u.body.rotation.x=-.17;
+u.legs[0].rotation.x=stride*.8;u.legs[1].rotation.x=-stride*.8;
+u.arms[0].rotation.x=-stride*.65;u.arms[1].rotation.x=stride*.65;
+}else if(u.state==='attacking'){
+const pulse=Math.sin(t*15);
+u.body.rotation.x=-.12;u.body.rotation.z=pulse*.055;
+u.arms[0].rotation.x=-1.15;u.arms[1].rotation.x=-1.5+pulse*.13;
+u.arms[0].rotation.z=-.22;u.arms[1].rotation.z=.15;
+u.legs[0].rotation.x=-.25;u.legs[1].rotation.x=.3;
+}else if(u.state==='dying'){
+const progress=Math.min(w/1.4,1);
+u.body.rotation.z=-progress*1.48;
+u.body.rotation.x=progress*.28;
+u.body.position.y=-progress*.52;
+u.arms[0].rotation.x=-progress*1.8;u.arms[1].rotation.x=progress*.85;
+u.legs[0].rotation.x=progress*.65;u.legs[1].rotation.x=-progress*.4;
+if(mode==='preview'&&w>2.8)setState(a,'dying');
+}
+u.badge.visible=el('icons').checked;
+}
+controls.update();renderer.render(scene,camera);
+}
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});syncBoard();setMode('battle');animate();
