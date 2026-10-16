@@ -1,6 +1,8 @@
 import * as THREE from 'https://esm.sh/three@0.169.0';
 import {OrbitControls} from 'https://esm.sh/three@0.169.0/examples/jsm/controls/OrbitControls.js';
 import {Chess} from 'https://esm.sh/chess.js@1.0.0';
+import {GLTFLoader} from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
+import {clone as cloneSkeleton} from 'https://esm.sh/three@0.169.0/examples/jsm/utils/SkeletonUtils.js';
 
 const TYPES={p:'Private',r:'Radio operator',n:'Grenadier',b:'Machine gunner',q:'Sniper',k:'General'};
 const SYMBOL={w:{p:'♙',r:'♖',n:'♘',b:'♗',q:'♕',k:'♔'},b:{p:'♟',r:'♜',n:'♞',b:'♝',q:'♛',k:'♚'}};
@@ -95,14 +97,44 @@ flash(origin,0xffcc76,.17);const bullet=spawn(new THREE.SphereGeometry(.045,8,6)
 async function walk(actor,target,type){const start=actor.position.clone(),end=new THREE.Vector3(target.x,.12,target.z);setState(actor,'moving');await tween(type==='n'?650:950,k=>{actor.position.lerpVectors(start,end,k);if(type==='n')actor.position.y+=Math.sin(k*Math.PI)*1.9});setState(actor,'idle')}
 async function performMove(from,to){busy=true;clearHighlights();const attacker=actors.get(from),type=attacker.userData.type;const move=game.move({from,to,promotion:'q'});if(!move){busy=false;return}const enPassant=move.flags.includes('e');const capturedSquare=enPassant?to[0]+from[1]:to;const victim=actors.get(capturedSquare);selected=null;legal=[];status(victim?`${TYPES[type]} attacks ${TYPES[victim.userData.type]}!`:`${TYPES[type]} advances to ${to}`);const dest=squareToWorld(to);if(victim){setState(victim,'targeted');if(el('cinematic').checked)await cameraFocus(attacker,victim);setState(attacker,'attacking');await wait(type==='r'?950:650);await effect(attacker,victim,type);setState(victim,'dying');await wait(650);setState(attacker,'idle');await walk(attacker,dest,type);await tween(650,k=>{victim.position.y=.12-k*1.7;victim.scale.setScalar(1-.25*k)});boardGroup.remove(victim);actors.delete(capturedSquare)}else await walk(attacker,dest,type);actors.delete(from);actors.set(to,attacker);if(move.flags.includes('k')||move.flags.includes('q')||move.flags.includes('e')||move.flags.includes('p'))syncBoard();if(victim&&el('cinematic').checked)resetCamera();updateTurn();status(game.isGameOver()?'Game over':`${game.turn()==='w'?'White':'Black'} to move`);busy=false}
 function resetCamera(){const from=camera.position.clone(),fromTarget=controls.target.clone(),to=mode==='battle'?new THREE.Vector3(10,15,16):new THREE.Vector3(6,5,8);tween(600,k=>{camera.position.lerpVectors(from,to,k);controls.target.lerpVectors(fromTarget,new THREE.Vector3(0,0,0),k);controls.update()})}
-function previewBuild(){previewActors.forEach(a=>previewGroup.remove(a));previewActors=[];[['whitePiece','whiteAnim','w',-1.5],['blackPiece','blackAnim','b',1.5]].forEach(([id,aid,color,x])=>{const a=soldier(el(id).value,color);a.position.set(x,.12,0);a.rotation.y=color==='w'?Math.PI/2:-Math.PI/2;setState(a,el(aid).value);previewGroup.add(a);previewActors.push(a)})}
-function setMode(next){mode=next;boardGroup.visible=next==='battle';previewGroup.visible=next==='preview';el('battleControls').classList.toggle('hide',next!=='battle');el('previewControls').classList.toggle('hide',next!=='preview');el('battleBtn').classList.toggle('primary',next==='battle');el('previewBtn').classList.toggle('primary',next==='preview');if(next==='preview'){previewBuild();status('Animation preview studio')}else status('Select a piece to move');resetCamera()}
+// v0.3.0: opt-in rigged soldier preview. Battlefield pieces remain procedural.
+let realisticTemplate=null,realisticClip=null,realisticMixer=null,realisticActor=null,realisticLoading=false;
+const realisticLoader=new GLTFLoader();
+function removeRealistic(){if(realisticMixer){realisticMixer.stopAllAction();realisticMixer=null}if(realisticActor){previewGroup.remove(realisticActor);realisticActor=null}}
+function attachRealistic(){
+ removeRealistic();
+ if(mode!=='preview'||!el('realisticPreview').checked||!realisticTemplate)return;
+ const proxy=previewActors[0];if(!proxy)return;
+ const visual=cloneSkeleton(realisticTemplate);
+ const bounds=new THREE.Box3().setFromObject(visual),size=new THREE.Vector3(),center=new THREE.Vector3();
+ bounds.getSize(size);bounds.getCenter(center);
+ if(size.y<.001)return;
+ const scale=1.75/size.y;
+ visual.scale.setScalar(scale);
+ visual.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+ visual.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
+ realisticActor=new THREE.Group();realisticActor.position.copy(proxy.position);realisticActor.rotation.copy(proxy.rotation);
+ realisticActor.add(visual);previewGroup.add(realisticActor);
+ proxy.userData.body.visible=false;proxy.userData.badge.visible=false;
+ if(realisticClip){realisticMixer=new THREE.AnimationMixer(visual);realisticMixer.clipAction(realisticClip).play()}
+ status('Rigged soldier loaded • original embedded animation playing');
+}
+function loadRealistic(){
+ if(realisticTemplate){attachRealistic();return}
+ if(realisticLoading)return;realisticLoading=true;status('Loading rigged soldier model…');
+ realisticLoader.load('./assets/soldier/scene.gltf',g=>{
+  realisticLoading=false;realisticTemplate=g.scene;realisticClip=g.animations[0]||null;attachRealistic();
+ },undefined,e=>{realisticLoading=false;el('realisticPreview').checked=false;status('Model files not uploaded yet. Use the v0.3.0 asset ZIP.');console.warn('Soldier asset missing',e)});
+}
+el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').checked)loadRealistic();else{removeRealistic();previewBuild()}});
+function previewBuild(){removeRealistic();previewActors.forEach(a=>previewGroup.remove(a));previewActors=[];[['whitePiece','whiteAnim','w',-1.5],['blackPiece','blackAnim','b',1.5]].forEach(([id,aid,color,x])=>{const a=soldier(el(id).value,color);a.position.set(x,.12,0);a.rotation.y=color==='w'?Math.PI/2:-Math.PI/2;setState(a,el(aid).value);previewGroup.add(a);previewActors.push(a)});if(el('realisticPreview').checked&&realisticTemplate)attachRealistic()}
+function setMode(next){mode=next;boardGroup.visible=next==='battle';previewGroup.visible=next==='preview';el('battleControls').classList.toggle('hide',next!=='battle');el('previewControls').classList.toggle('hide',next!=='preview');el('battleBtn').classList.toggle('primary',next==='battle');el('previewBtn').classList.toggle('primary',next==='preview');if(next==='preview'){previewBuild();status('Animation preview studio');if(el('realisticPreview').checked)loadRealistic()}else removeRealistic();else status('Select a piece to move');resetCamera()}
 for(const [id,initial] of [['whitePiece','p'],['blackPiece','q']]){for(const [key,name] of Object.entries(TYPES)){const o=document.createElement('option');o.value=key;o.textContent=`${SYMBOL[id==='whitePiece'?'w':'b'][key]} ${name}`;el(id).append(o)}el(id).value=initial;el(id).addEventListener('change',previewBuild)}for(const id of ['whiteAnim','blackAnim']){for(const name of ANIMS){const o=document.createElement('option');o.value=name;o.textContent=name[0].toUpperCase()+name.slice(1);el(id).append(o)}el(id).value=id==='blackAnim'?'targeted':'idle';el(id).addEventListener('change',previewBuild)}
 el('battleBtn').onclick=()=>setMode('battle');el('previewBtn').onclick=()=>setMode('preview');el('cameraBtn').onclick=resetCamera;el('previewCamera').onclick=resetCamera;el('resetBtn').onclick=()=>{if(busy)return;game.reset();syncBoard();clearHighlights();selected=null;setMode('battle');status('New game ready')};el('undoBtn').onclick=()=>{if(busy)return;game.undo();syncBoard();clearHighlights();selected=null;status('Last move undone')};el('icons').onchange=()=>{for(const a of [...actors.values(),...previewActors])a.userData.badge.visible=el('icons').checked};el('testAttack').onclick=async()=>{if(busy)return;busy=true;const panel=document.getElementById('ui');if(!panel.classList.contains('collapsed'))document.getElementById('uiToggle').click();await wait(250);const [a,b]=previewActors;setState(a,'highlighted');setState(b,'targeted');status('Preview: acquiring target');await cameraFocus(a,b);setState(a,'attacking');await wait(850);await effect(a,b,a.userData.type);setState(b,'dying');await wait(1250);previewBuild();resetCamera();status('Preview attack complete');busy=false};
 const clock=new THREE.Clock();
 function animate(){
 requestAnimationFrame(animate);
-const dt=Math.min(clock.getDelta(),.05),t=performance.now()/1000;
+const dt=Math.min(clock.getDelta(),.05),t=performance.now()/1000;if(realisticMixer)realisticMixer.update(dt);
 for(const a of [...actors.values(),...previewActors]){
 const u=a.userData;u.age+=dt;
 const w=u.age,cycle=t*2.5+a.id;
@@ -145,7 +177,7 @@ u.arms[0].rotation.x=-progress*1.8;u.arms[1].rotation.x=progress*.85;
 u.legs[0].rotation.x=progress*.65;u.legs[1].rotation.x=-progress*.4;
 if(mode==='preview'&&w>2.8)setState(a,'dying');
 }
-u.badge.visible=el('icons').checked;
+u.badge.visible=el('icons').checked&&!(a===previewActors[0]&&realisticActor);
 }
 controls.update();renderer.render(scene,camera);
 }
