@@ -117,8 +117,8 @@ function attachRealistic(){
  realisticActor=new THREE.Group();realisticActor.position.copy(proxy.position);realisticActor.rotation.copy(proxy.rotation);
  realisticActor.add(visual);previewGroup.add(realisticActor);
  proxy.userData.body.visible=false;proxy.userData.badge.visible=false;
- if(realisticClip){realisticMixer=new THREE.AnimationMixer(visual);realisticMixer.clipAction(realisticClip).play()}
- status('Rigged soldier loaded • original embedded animation playing');
+ if(realisticClip&&el('realisticAnimation').value==='celebration'){realisticMixer=new THREE.AnimationMixer(visual);realisticMixer.clipAction(realisticClip).play()}
+ status(el('realisticAnimation').value==='celebration'?'Celebration dance playing 🕺':'Rigged soldier • neutral pose (combat animations coming next)');
 }
 function loadRealistic(){
  if(realisticTemplate){attachRealistic();return}
@@ -127,6 +127,7 @@ function loadRealistic(){
   realisticLoading=false;realisticTemplate=g.scene;realisticClip=g.animations[0]||null;attachRealistic();
  },undefined,e=>{realisticLoading=false;el('realisticPreview').checked=false;status('Model files not uploaded yet. Use the v0.3.0 asset ZIP.');console.warn('Soldier asset missing',e)});
 }
+el('realisticAnimation').addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('soldierScale').addEventListener('input',()=>{el('soldierScaleValue').textContent=Math.round(Number(el('soldierScale').value)*100)+'%';if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').checked)loadRealistic();else{removeRealistic();previewBuild()}});
 function previewBuild(){removeRealistic();previewActors.forEach(a=>previewGroup.remove(a));previewActors=[];[['whitePiece','whiteAnim','w',-1.5],['blackPiece','blackAnim','b',1.5]].forEach(([id,aid,color,x])=>{const a=soldier(el(id).value,color);a.position.set(x,.12,0);a.rotation.y=color==='w'?Math.PI/2:-Math.PI/2;setState(a,el(aid).value);previewGroup.add(a);previewActors.push(a)});if(el('realisticPreview').checked&&realisticTemplate)attachRealistic()}
