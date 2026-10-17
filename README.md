@@ -1,4 +1,4 @@
-# Battlefield Chess 3D — Prototype 1 (v0.4.4)
+# Battlefield Chess 3D — Prototype 1 (v0.4.5)
 
 Playable 3D chess with procedural military characters, rocky terrain, a character animation preview studio, and cinematic capture sequences.
 
@@ -25,6 +25,7 @@ Cloudflare Pages: connect this GitHub repository, select branch `main`, framewor
 - Idle, Walk, and Death play directly on the two Quaternius rigs and retarget onto the soldier
 - Independent mesh and skeleton visibility for all three rigs, bone labels, joint XYZ axes, pause, and shared scrub time
 - Comparison rigs are normalized to 1.1 m by default and normalized against the skinned vertices actually rendered, then inverse-bind matrices are refreshed so the selected height is enforced after skinning
+- Preview camera resets face the three-rig lineup head-on, keeping the left source rig in frame and the comparison evenly spaced on mobile
 - Bone mapping report with rest-pose quaternion and hierarchy differences; live local Euler snapshots for pelvis, spine, neck, head, arm, and leg joints
 - Soldier's original embedded animation remains available as Celebration Dance
 - Toggleable camera-facing chess symbols, reset, and undo
