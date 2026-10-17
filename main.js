@@ -158,25 +158,26 @@ function updateRigDiagnostics(visual){
  console.groupEnd();
 }
 function diagnosticLabel(name){
- const c=document.createElement('canvas');c.width=512;c.height=96;
- const ctx=c.getContext('2d');ctx.fillStyle='#071722dd';ctx.fillRect(0,0,512,96);
- ctx.fillStyle='#f5df86';ctx.font='bold 31px sans-serif';ctx.fillText(name,10,61);
+ const c=document.createElement('canvas');c.width=384;c.height=64;
+ const ctx=c.getContext('2d');ctx.clearRect(0,0,384,64);
+ ctx.font='bold 27px sans-serif';ctx.lineWidth=5;ctx.strokeStyle='#0b1625';
+ ctx.strokeText(name,6,39);ctx.fillStyle='#fff0a5';ctx.fillText(name,6,39);
  const tex=new THREE.CanvasTexture(c),mat=new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true});
- const sprite=new THREE.Sprite(mat);sprite.scale.set(.75,.14,1);return sprite;
+ const sprite=new THREE.Sprite(mat);sprite.scale.set(.53,.09,1);return sprite;
 }
 function addBoneGuides(root){
  const guide=new THREE.Group();previewGroup.add(guide);diagnosticObjects.push(guide);
- const major=['pelvis','spine_01','spine_02','spine_03','neck_01','Head','clavicle_l','upperarm_l','lowerarm_l','hand_l','clavicle_r','upperarm_r','lowerarm_r','hand_r','thigh_l','calf_l','foot_l','thigh_r','calf_r','foot_r','Hips_01','Spine_02','Spine1_03','Spine2_04','Neck_05','Head_06','LeftArm_035','LeftForeArm_036','LeftHand_037','RightArm_011','RightForeArm_012','RightHand_013','LeftUpLeg_064','LeftLeg_065','LeftFoot_066','RightUpLeg_059','RightLeg_060','RightFoot_061'];
+ const major=['pelvis','spine_02','Head','upperarm_l','upperarm_r','thigh_l','thigh_r','calf_l','calf_r','Hips_01','Spine1_03','Head_06','LeftArm_035','RightArm_011','LeftUpLeg_064','RightUpLeg_059','LeftLeg_065','RightLeg_060'];
  const entries=[];
  for(const name of major){
   const bone=root.getObjectByName(name);if(!bone||!bone.isBone)continue;
-  const label=diagnosticLabel(name),axes=new THREE.AxesHelper(.19);
+  const label=diagnosticLabel(name),axes=new THREE.AxesHelper(.16);
   guide.add(label,axes);entries.push({bone,label,axes});
  }
  diagnosticMixers.push(()=>{for(const {bone,label,axes} of entries){
   bone.updateWorldMatrix(true,false);
   const p=new THREE.Vector3(),q=new THREE.Quaternion();bone.getWorldPosition(p);bone.getWorldQuaternion(q);
-  label.position.copy(p).add(new THREE.Vector3(0,.12,0));axes.position.copy(p);axes.quaternion.copy(q);
+  label.position.copy(p).add(new THREE.Vector3(0,.09,0));axes.position.copy(p);axes.quaternion.copy(q);
   label.visible=el('showBoneLabels').checked;axes.visible=el('showBoneAxes').checked;
  }});
 }
