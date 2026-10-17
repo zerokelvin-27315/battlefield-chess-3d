@@ -97,13 +97,13 @@ flash(origin,0xffcc76,.17);const bullet=spawn(new THREE.SphereGeometry(.045,8,6)
 async function walk(actor,target,type){const start=actor.position.clone(),end=new THREE.Vector3(target.x,.12,target.z);setState(actor,'moving');await tween(type==='n'?650:950,k=>{actor.position.lerpVectors(start,end,k);if(type==='n')actor.position.y+=Math.sin(k*Math.PI)*1.9});setState(actor,'idle')}
 async function performMove(from,to){busy=true;clearHighlights();const attacker=actors.get(from),type=attacker.userData.type;const move=game.move({from,to,promotion:'q'});if(!move){busy=false;return}const enPassant=move.flags.includes('e');const capturedSquare=enPassant?to[0]+from[1]:to;const victim=actors.get(capturedSquare);selected=null;legal=[];status(victim?`${TYPES[type]} attacks ${TYPES[victim.userData.type]}!`:`${TYPES[type]} advances to ${to}`);const dest=squareToWorld(to);if(victim){setState(victim,'targeted');if(el('cinematic').checked)await cameraFocus(attacker,victim);setState(attacker,'attacking');await wait(type==='r'?950:650);await effect(attacker,victim,type);setState(victim,'dying');await wait(650);setState(attacker,'idle');await walk(attacker,dest,type);await tween(650,k=>{victim.position.y=.12-k*1.7;victim.scale.setScalar(1-.25*k)});boardGroup.remove(victim);actors.delete(capturedSquare)}else await walk(attacker,dest,type);actors.delete(from);actors.set(to,attacker);if(move.flags.includes('k')||move.flags.includes('q')||move.flags.includes('e')||move.flags.includes('p'))syncBoard();if(victim&&el('cinematic').checked)resetCamera();updateTurn();status(game.isGameOver()?'Game over':`${game.turn()==='w'?'White':'Black'} to move`);busy=false}
 function resetCamera(){const from=camera.position.clone(),fromTarget=controls.target.clone(),to=mode==='battle'?new THREE.Vector3(10,15,16):new THREE.Vector3(0,4.5,14.5),target=mode==='battle'?new THREE.Vector3(0,0,0):new THREE.Vector3(0,.45,0);tween(600,k=>{camera.position.lerpVectors(from,to,k);controls.target.lerpVectors(fromTarget,target,k);controls.update()})}
-// v0.4.6 aligns diagnostic rigs with the preview pads; front-facing framing and skinned-vertex normalization.
+// v0.4.7 grounds the retargeted Death pose from its rendered skinned bounds.
 let realisticTemplate=null,realisticClip=null,realisticMixer=null,realisticActor=null,realisticWrapper=null,realisticLoading=false;
 let referenceTemplate=null,referenceMixer=null,referenceActor=null,referenceWrapper=null,referenceLoading=false;
 const realisticLoader=new GLTFLoader();
 // Keep animation tracks from overriding the global miniature scale.
 const RIG_PREVIEW_HEIGHT=1.1;
-function removeRealistic(){for(const mixer of [realisticMixer,referenceMixer,sourceMixer])mixer?.stopAllAction();realisticMixer=referenceMixer=sourceMixer=null;for(const o of diagnosticObjects){previewGroup.remove(o);o.traverse(x=>{if(x.isSprite){x.material.map?.dispose();x.material.dispose()}if(x.isAxesHelper){x.geometry.dispose();x.material.dispose()}if(x.isLine){x.geometry.dispose();if(Array.isArray(x.material))x.material.forEach(m=>m.dispose());else x.material.dispose()}})}diagnosticObjects=[];sourceActor=referenceActor=null;sourceWrapper=referenceWrapper=realisticWrapper=null;diagnosticMixers=[];if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}realisticActor=null;for(const a of previewActors)if(a?.userData.body){a.userData.body.visible=true;a.userData.badge.visible=el('icons').checked}}
+function removeRealistic(){for(const mixer of [realisticMixer,referenceMixer,sourceMixer])mixer?.stopAllAction();realisticMixer=referenceMixer=sourceMixer=null;for(const o of diagnosticObjects){previewGroup.remove(o);o.traverse(x=>{if(x.isSprite){x.material.map?.dispose();x.material.dispose()}if(x.isAxesHelper){x.geometry.dispose();x.material.dispose()}if(x.isLine){x.geometry.dispose();if(Array.isArray(x.material))x.material.forEach(m=>m.dispose());else x.material.dispose()}})}diagnosticObjects=[];sourceActor=referenceActor=null;sourceWrapper=referenceWrapper=realisticWrapper=null;diagnosticMixers=[];if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}realisticActor=null;groundDeathPose=false;for(const a of previewActors)if(a?.userData.body){a.userData.body.visible=true;a.userData.badge.visible=el('icons').checked}}
 // Retarget in corresponding parent-rest frames, preserving the destination bind pose.
 const BONE_MAP={
  root:'_rootJoint',pelvis:'Hips_01',spine_01:'Spine_02',spine_02:'Spine1_03',spine_03:'Spine2_04',neck_01:'Neck_05',Head:'Head_06',
@@ -112,7 +112,7 @@ const BONE_MAP={
  thigh_l:'LeftUpLeg_064',calf_l:'LeftLeg_065',foot_l:'LeftFoot_066',ball_l:'LeftToeBase_067',ball_leaf_l:'LeftToeEnd_068',
  thigh_r:'RightUpLeg_059',calf_r:'RightLeg_060',foot_r:'RightFoot_061',ball_r:'RightToeBase_062',ball_leaf_r:'RightToeEnd_063'
 };
-let animationSource=null,retargetCache=new Map(),animationLoading=false,rigHelper=null,sourceActor=null,sourceWrapper=null,sourceMixer=null,diagnosticObjects=[],diagnosticMixers=[],poseRefresh=0;
+let animationSource=null,retargetCache=new Map(),animationLoading=false,rigHelper=null,sourceActor=null,sourceWrapper=null,sourceMixer=null,diagnosticObjects=[],diagnosticMixers=[],poseRefresh=0,groundDeathPose=false;
 for(const side of ['l','r'])for(const [finger,dest] of Object.entries({index:'Index',middle:'Middle',ring:'Ring',pinky:'Pinky',thumb:'Thumb'}))for(let i=1;i<=4;i++){
  const key=finger+'_0'+i+(i===4?'_leaf':'')+'_'+side,base=side==='l'?{thumb:39,middle:43,ring:47,pinky:51,index:55}[finger]:{thumb:15,middle:19,ring:23,pinky:27,index:31}[finger],number=base+i-1;
  BONE_MAP[key]=(side==='l'?'LeftHand':'RightHand')+dest+i+'_'+String(number).padStart(3,'0');
@@ -185,8 +185,17 @@ function updatePoseDiagnostics(){if(!animationSource||!sourceActor||!referenceAc
 function updateDiagnosticFrame(dt){
  if(!el('pauseRig').checked){for(const mixer of [sourceMixer,referenceMixer,realisticMixer])mixer?.update(dt)}
  else {const time=Number(el('rigFrame').value)/100;for(const mixer of [sourceMixer,referenceMixer,realisticMixer])if(mixer){mixer.setTime(time);mixer.update(0)}}
+ groundRetargetedDeath();
  for(const update of diagnosticMixers)update();
  poseRefresh+=dt;if(poseRefresh>.2){poseRefresh=0;updatePoseDiagnostics()}
+}
+function groundRetargetedDeath(){
+ if(!groundDeathPose||!realisticActor||!realisticWrapper)return;
+ realisticActor.updateWorldMatrix(true,true);
+ const bounds=new THREE.Box3().setFromObject(realisticActor,true);
+ if(bounds.isEmpty()||!Number.isFinite(bounds.min.y))return;
+ const correction=.12-bounds.min.y;
+ if(Math.abs(correction)>.0001){realisticWrapper.position.y+=correction;realisticWrapper.updateWorldMatrix(true,true)}
 }
 function attachRealistic(){
  removeRealistic();
@@ -196,6 +205,7 @@ function attachRealistic(){
  realisticActor=visual;previewGroup.add(realisticWrapper);diagnosticObjects.push(realisticWrapper);setRigMeshVisibility(visual,el('showSoldierMesh').checked);if(el('showSkeleton').checked)rigHelper=addRigHelper(visual,'showSkeleton');
  for(const piece of previewActors)if(piece?.userData.body){piece.userData.body.visible=false;piece.userData.badge.visible=false}
  const selectedAnimation=el('realisticAnimation').value;
+ groundDeathPose=selectedAnimation==='Death01';
  let clip=null;
  if(selectedAnimation==='celebration')clip=realisticClip;
  else if(animationSource){
