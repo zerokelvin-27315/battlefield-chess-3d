@@ -97,13 +97,13 @@ flash(origin,0xffcc76,.17);const bullet=spawn(new THREE.SphereGeometry(.045,8,6)
 async function walk(actor,target,type){const start=actor.position.clone(),end=new THREE.Vector3(target.x,.12,target.z);setState(actor,'moving');await tween(type==='n'?650:950,k=>{actor.position.lerpVectors(start,end,k);if(type==='n')actor.position.y+=Math.sin(k*Math.PI)*1.9});setState(actor,'idle')}
 async function performMove(from,to){busy=true;clearHighlights();const attacker=actors.get(from),type=attacker.userData.type;const move=game.move({from,to,promotion:'q'});if(!move){busy=false;return}const enPassant=move.flags.includes('e');const capturedSquare=enPassant?to[0]+from[1]:to;const victim=actors.get(capturedSquare);selected=null;legal=[];status(victim?`${TYPES[type]} attacks ${TYPES[victim.userData.type]}!`:`${TYPES[type]} advances to ${to}`);const dest=squareToWorld(to);if(victim){setState(victim,'targeted');if(el('cinematic').checked)await cameraFocus(attacker,victim);setState(attacker,'attacking');await wait(type==='r'?950:650);await effect(attacker,victim,type);setState(victim,'dying');await wait(650);setState(attacker,'idle');await walk(attacker,dest,type);await tween(650,k=>{victim.position.y=.12-k*1.7;victim.scale.setScalar(1-.25*k)});boardGroup.remove(victim);actors.delete(capturedSquare)}else await walk(attacker,dest,type);actors.delete(from);actors.set(to,attacker);if(move.flags.includes('k')||move.flags.includes('q')||move.flags.includes('e')||move.flags.includes('p'))syncBoard();if(victim&&el('cinematic').checked)resetCamera();updateTurn();status(game.isGameOver()?'Game over':`${game.turn()==='w'?'White':'Black'} to move`);busy=false}
 function resetCamera(){const from=camera.position.clone(),fromTarget=controls.target.clone(),to=mode==='battle'?new THREE.Vector3(10,15,16):new THREE.Vector3(6,5,8);tween(600,k=>{camera.position.lerpVectors(from,to,k);controls.target.lerpVectors(fromTarget,new THREE.Vector3(0,0,0),k);controls.update()})}
-// v0.4.1 compact three-way rig comparison. Battlefield pieces remain procedural.
-let realisticTemplate=null,realisticClip=null,realisticMixer=null,realisticActor=null,realisticLoading=false;
-let referenceTemplate=null,referenceMixer=null,referenceActor=null,referenceLoading=false;
+// v0.4.2 animation-safe scale for the three-way rig comparison.
+let realisticTemplate=null,realisticClip=null,realisticMixer=null,realisticActor=null,realisticWrapper=null,realisticLoading=false;
+let referenceTemplate=null,referenceMixer=null,referenceActor=null,referenceWrapper=null,referenceLoading=false;
 const realisticLoader=new GLTFLoader();
-// Chess-preview characters should read as miniatures on the seven-unit stage.
+// Keep animation tracks from overriding the global miniature scale.
 const RIG_PREVIEW_HEIGHT=1.1;
-function removeRealistic(){for(const mixer of [realisticMixer,referenceMixer,sourceMixer])mixer?.stopAllAction();realisticMixer=referenceMixer=sourceMixer=null;for(const o of diagnosticObjects){previewGroup.remove(o);o.traverse(x=>{if(x.isSprite){x.material.map?.dispose();x.material.dispose()}if(x.isAxesHelper){x.geometry.dispose();x.material.dispose()}if(x.isLine){x.geometry.dispose();if(Array.isArray(x.material))x.material.forEach(m=>m.dispose());else x.material.dispose()}})}diagnosticObjects=[];sourceActor=referenceActor=null;diagnosticMixers=[];if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}if(realisticActor){previewGroup.remove(realisticActor);realisticActor=null}for(const a of previewActors)if(a?.userData.body){a.userData.body.visible=true;a.userData.badge.visible=el('icons').checked}}
+function removeRealistic(){for(const mixer of [realisticMixer,referenceMixer,sourceMixer])mixer?.stopAllAction();realisticMixer=referenceMixer=sourceMixer=null;for(const o of diagnosticObjects){previewGroup.remove(o);o.traverse(x=>{if(x.isSprite){x.material.map?.dispose();x.material.dispose()}if(x.isAxesHelper){x.geometry.dispose();x.material.dispose()}if(x.isLine){x.geometry.dispose();if(Array.isArray(x.material))x.material.forEach(m=>m.dispose());else x.material.dispose()}})}diagnosticObjects=[];sourceActor=referenceActor=null;sourceWrapper=referenceWrapper=realisticWrapper=null;diagnosticMixers=[];if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}realisticActor=null;for(const a of previewActors)if(a?.userData.body){a.userData.body.visible=true;a.userData.badge.visible=el('icons').checked}}
 // Retarget in corresponding parent-rest frames, preserving the destination bind pose.
 const BONE_MAP={
  root:'_rootJoint',pelvis:'Hips_01',spine_01:'Spine_02',spine_02:'Spine1_03',spine_03:'Spine2_04',neck_01:'Neck_05',Head:'Head_06',
@@ -112,7 +112,7 @@ const BONE_MAP={
  thigh_l:'LeftUpLeg_064',calf_l:'LeftLeg_065',foot_l:'LeftFoot_066',ball_l:'LeftToeBase_067',ball_leaf_l:'LeftToeEnd_068',
  thigh_r:'RightUpLeg_059',calf_r:'RightLeg_060',foot_r:'RightFoot_061',ball_r:'RightToeBase_062',ball_leaf_r:'RightToeEnd_063'
 };
-let animationSource=null,retargetCache=new Map(),animationLoading=false,rigHelper=null,sourceActor=null,sourceMixer=null,diagnosticObjects=[],diagnosticMixers=[],poseRefresh=0;
+let animationSource=null,retargetCache=new Map(),animationLoading=false,rigHelper=null,sourceActor=null,sourceWrapper=null,sourceMixer=null,diagnosticObjects=[],diagnosticMixers=[],poseRefresh=0;
 for(const side of ['l','r'])for(const [finger,dest] of Object.entries({index:'Index',middle:'Middle',ring:'Ring',pinky:'Pinky',thumb:'Thumb'}))for(let i=1;i<=4;i++){
  const key=finger+'_0'+i+(i===4?'_leaf':'')+'_'+side,base=side==='l'?{thumb:39,middle:43,ring:47,pinky:51,index:55}[finger]:{thumb:15,middle:19,ring:23,pinky:27,index:31}[finger],number=base+i-1;
  BONE_MAP[key]=(side==='l'?'LeftHand':'RightHand')+dest+i+'_'+String(number).padStart(3,'0');
@@ -170,14 +170,14 @@ function addBoneGuides(root){
   label.visible=el('showBoneLabels').checked;axes.visible=el('showBoneAxes').checked;
  }});
 }
-function normalizeRig(root,x,userScale){const b=new THREE.Box3().setFromObject(root),size=new THREE.Vector3();b.getSize(size);const scale=size.y>.001?RIG_PREVIEW_HEIGHT/size.y*userScale:1;root.scale.setScalar(scale);root.position.set(x-((b.min.x+b.max.x)/2)*scale,-b.min.y*scale+.12,-((b.min.z+b.max.z)/2)*scale);root.updateMatrixWorld(true);return scale}
+function normalizeRig(root,x,userScale){const b=new THREE.Box3().setFromObject(root),size=new THREE.Vector3(),center=new THREE.Vector3();b.getSize(size);b.getCenter(center);const scale=size.y>.001?RIG_PREVIEW_HEIGHT/size.y*userScale:1,wrapper=new THREE.Group();wrapper.position.set(x-center.x*scale,.12-b.min.y*scale,-center.z*scale);wrapper.scale.setScalar(scale);wrapper.add(root);wrapper.updateMatrixWorld(true);return {scale,wrapper}}
 function setRigMeshVisibility(root,visible){root?.traverse(o=>{if(o.isMesh)o.visible=visible})}
 function addRigHelper(root,id){const helper=new THREE.SkeletonHelper(root);helper.material.depthTest=false;helper.material.transparent=true;helper.material.opacity=.88;helper.visible=el(id).checked;previewGroup.add(helper);diagnosticObjects.push(helper);return helper}
 function playSynced(mixer,clip,name){if(!mixer||!clip)return;const action=mixer.clipAction(clip);if(name==='Death01'){action.setLoop(THREE.LoopOnce,1);action.clampWhenFinished=true}action.play()}
 function setupSourceComparison(selected,userScale){
  if(!animationSource||!referenceTemplate)return;
- const source=cloneSkeleton(animationSource.scene);const sourceScale=normalizeRig(source,-2.3,userScale);setRigMeshVisibility(source,el('showSourceMesh').checked);previewGroup.add(source);diagnosticObjects.push(source);sourceActor=source;addRigHelper(source,'showSourceSkeleton');sourceMixer=new THREE.AnimationMixer(source);
- const reference=cloneSkeleton(referenceTemplate);normalizeRig(reference,0,userScale);setRigMeshVisibility(reference,el('showReferenceMesh').checked);previewGroup.add(reference);diagnosticObjects.push(reference);referenceActor=reference;addRigHelper(reference,'showReferenceSkeleton');referenceMixer=new THREE.AnimationMixer(reference);
+ const source=cloneSkeleton(animationSource.scene),sourceRig=normalizeRig(source,-2.3,userScale),sourceScale=sourceRig.scale;sourceWrapper=sourceRig.wrapper;setRigMeshVisibility(source,el('showSourceMesh').checked);previewGroup.add(sourceWrapper);diagnosticObjects.push(sourceWrapper);sourceActor=source;addRigHelper(source,'showSourceSkeleton');sourceMixer=new THREE.AnimationMixer(source);
+ const reference=cloneSkeleton(referenceTemplate),referenceRig=normalizeRig(reference,0,userScale);referenceWrapper=referenceRig.wrapper;setRigMeshVisibility(reference,el('showReferenceMesh').checked);previewGroup.add(referenceWrapper);diagnosticObjects.push(referenceWrapper);referenceActor=reference;addRigHelper(reference,'showReferenceSkeleton');referenceMixer=new THREE.AnimationMixer(reference);
  const clip=animationSource.animations.find(a=>a.name===selected);if(clip){playSynced(sourceMixer,clip,selected);playSynced(referenceMixer,clip,selected)}
  addBoneGuides(source);addBoneGuides(reference);return sourceScale;
 }
@@ -191,9 +191,9 @@ function updateDiagnosticFrame(dt){
 function attachRealistic(){
  removeRealistic();
  if(mode!=='preview'||!el('realisticPreview').checked||!realisticTemplate||!referenceTemplate||!animationSource)return;
- const proxy=previewActors[0];if(!proxy)return;const userScale=Number(el('soldierScale').value),visual=cloneSkeleton(realisticTemplate);const scale=normalizeRig(visual,2.3,userScale);
+ const proxy=previewActors[0];if(!proxy)return;const userScale=Number(el('soldierScale').value),visual=cloneSkeleton(realisticTemplate),soldierRig=normalizeRig(visual,2.3,userScale),scale=soldierRig.scale;realisticWrapper=soldierRig.wrapper;
  visual.traverse(o=>{if(o.isLight)o.visible=false;if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
- realisticActor=visual;previewGroup.add(visual);setRigMeshVisibility(visual,el('showSoldierMesh').checked);if(el('showSkeleton').checked)rigHelper=addRigHelper(visual,'showSkeleton');
+ realisticActor=visual;previewGroup.add(realisticWrapper);diagnosticObjects.push(realisticWrapper);setRigMeshVisibility(visual,el('showSoldierMesh').checked);if(el('showSkeleton').checked)rigHelper=addRigHelper(visual,'showSkeleton');
  for(const piece of previewActors)if(piece?.userData.body){piece.userData.body.visible=false;piece.userData.badge.visible=false}
  const selectedAnimation=el('realisticAnimation').value;
  let clip=null;
