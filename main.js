@@ -115,7 +115,7 @@ function retargetClip(clip,target){
  const tracks=[];
  for(const track of clip.tracks){
   if(!track.name.endsWith('.quaternion'))continue;
-  const sourceName=track.name.slice(0,-'.quaternion'.length).replace(/^.*\\//,'');
+  const sourceName=track.name.slice(0,-'.quaternion'.length).split('/').pop();
   const targetName=BONE_MAP[sourceName];if(!targetName)continue;
   const a=source.getObjectByName(sourceName),b=target.getObjectByName(targetName);
   if(!a||!b)continue;
