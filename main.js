@@ -171,8 +171,8 @@ function attachRealistic(){
  visual.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
  visual.traverse(o=>{if(o.isLight)o.visible=false;if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
  realisticActor=new THREE.Group();realisticActor.position.copy(proxy.position);realisticActor.rotation.copy(proxy.rotation);
- realisticActor.add(visual);previewGroup.add(realisticActor);
- if(el('showSkeleton').checked){rigHelper=new THREE.SkeletonHelper(visual);rigHelper.material.depthTest=false;rigHelper.material.transparent=true;rigHelper.material.opacity=.9;realisticActor.add(rigHelper)}
+ realisticActor.add(visual);previewGroup.add(realisticActor);realisticActor.updateMatrixWorld(true);
+ if(el('showSkeleton').checked){rigHelper=new THREE.SkeletonHelper(visual);rigHelper.material.depthTest=false;rigHelper.material.transparent=true;rigHelper.material.opacity=.9;previewGroup.add(rigHelper)}
  updateRigDiagnostics(visual);
  proxy.userData.body.visible=false;proxy.userData.badge.visible=false;
  const selectedAnimation=el('realisticAnimation').value;
