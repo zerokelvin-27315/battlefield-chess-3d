@@ -111,25 +111,27 @@ const BONE_MAP={
 };
 let animationSource=null,retargetCache=new Map(),animationLoading=false;
 function retargetClip(clip,target){
+ // Convert joint-local motion into each destination bone's own bind-pose axes.
+ // Preserve the destination's bind orientation, not the source rig's A/T-pose.
  const source=animationSource.scene;source.updateMatrixWorld(true);target.updateMatrixWorld(true);
  const tracks=[];
  for(const track of clip.tracks){
   if(!track.name.endsWith('.quaternion'))continue;
   const sourceName=track.name.slice(0,-'.quaternion'.length).split('/').pop();
   const targetName=BONE_MAP[sourceName];if(!targetName)continue;
-  const a=source.getObjectByName(sourceName),b=target.getObjectByName(targetName);
-  if(!a||!b)continue;
-  const aParent=new THREE.Quaternion(),bParent=new THREE.Quaternion();
-  if(a.parent)a.parent.getWorldQuaternion(aParent);
-  if(b.parent)b.parent.getWorldQuaternion(bParent);
-  const transform=bParent.clone().invert().multiply(aParent);
-  const invTransform=transform.clone().invert(),restA=a.quaternion.clone(),restB=b.quaternion.clone();
-  const invRestA=restA.clone().invert(),values=[];
+  const src=source.getObjectByName(sourceName),dst=target.getObjectByName(targetName);
+  if(!src||!dst)continue;
+  const sourceWorld=new THREE.Quaternion(),targetWorld=new THREE.Quaternion();
+  src.getWorldQuaternion(sourceWorld);dst.getWorldQuaternion(targetWorld);
+  const axes=targetWorld.clone().invert().multiply(sourceWorld),axesInverse=axes.clone().invert();
+  const sourceRestInverse=src.quaternion.clone().invert(),targetRest=dst.quaternion.clone();
+  const values=[];
   for(let i=0;i<track.values.length;i+=4){
-   const q=new THREE.Quaternion().fromArray(track.values,i);
-   const delta=q.multiply(invRestA);
-   const out=transform.clone().multiply(delta).multiply(invTransform).multiply(restB).normalize();
-   values.push(out.x,out.y,out.z,out.w);
+   const sampled=new THREE.Quaternion().fromArray(track.values,i);
+   const localDelta=sourceRestInverse.clone().multiply(sampled);
+   const converted=axes.clone().multiply(localDelta).multiply(axesInverse);
+   const output=targetRest.clone().multiply(converted).normalize();
+   values.push(output.x,output.y,output.z,output.w);
   }
   tracks.push(new THREE.QuaternionKeyframeTrack(targetName+'.quaternion',track.times,values));
  }
