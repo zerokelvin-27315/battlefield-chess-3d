@@ -100,7 +100,7 @@ function resetCamera(){const from=camera.position.clone(),fromTarget=controls.ta
 // v0.3.0: opt-in rigged soldier preview. Battlefield pieces remain procedural.
 let realisticTemplate=null,realisticClip=null,realisticMixer=null,realisticActor=null,realisticLoading=false;
 const realisticLoader=new GLTFLoader();
-function removeRealistic(){if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}if(realisticMixer){realisticMixer.stopAllAction();realisticMixer=null}if(realisticActor){previewGroup.remove(realisticActor);realisticActor=null}}
+function removeRealistic(){for(const o of diagnosticObjects){previewGroup.remove(o);o.traverse(x=>{if(x.isSprite){x.material.map?.dispose();x.material.dispose()}if(x.isAxesHelper){x.geometry.dispose();x.material.dispose()}})}diagnosticObjects=[];sourceActor=null;sourceMixer=null;diagnosticMixers=[];if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}if(realisticMixer){realisticMixer.stopAllAction();realisticMixer=null}if(realisticActor){previewGroup.remove(realisticActor);realisticActor=null}}
 // Retarget local joint rotations through each rig's rest-pose parent space.
 const BONE_MAP={
  pelvis:'Hips_01',spine_01:'Spine_02',spine_02:'Spine1_03',spine_03:'Spine2_04',neck_01:'Neck_05',Head:'Head_06',
@@ -109,7 +109,7 @@ const BONE_MAP={
  thigh_l:'LeftUpLeg_064',calf_l:'LeftLeg_065',foot_l:'LeftFoot_066',ball_l:'LeftToeBase_067',
  thigh_r:'RightUpLeg_059',calf_r:'RightLeg_060',foot_r:'RightFoot_061',ball_r:'RightToeBase_062'
 };
-let animationSource=null,retargetCache=new Map(),animationLoading=false,rigHelper=null;
+let animationSource=null,retargetCache=new Map(),animationLoading=false,rigHelper=null,sourceActor=null,sourceMixer=null,diagnosticObjects=[],diagnosticMixers=[];
 function retargetClip(clip,target){
  // Convert joint-local motion into each destination bone's own bind-pose axes.
  // Preserve the destination's bind orientation, not the source rig's A/T-pose.
@@ -157,6 +157,49 @@ function updateRigDiagnostics(visual){
  console.table(bones.map(b=>({name:b.name,parent:b.parent?.name,rotation:b.quaternion.toArray().map(n=>+n.toFixed(3))})));
  console.groupEnd();
 }
+function diagnosticLabel(name){
+ const c=document.createElement('canvas');c.width=512;c.height=96;
+ const ctx=c.getContext('2d');ctx.fillStyle='#071722dd';ctx.fillRect(0,0,512,96);
+ ctx.fillStyle='#f5df86';ctx.font='bold 31px sans-serif';ctx.fillText(name,10,61);
+ const tex=new THREE.CanvasTexture(c),mat=new THREE.SpriteMaterial({map:tex,depthTest:false,transparent:true});
+ const sprite=new THREE.Sprite(mat);sprite.scale.set(.75,.14,1);return sprite;
+}
+function addBoneGuides(root){
+ const guide=new THREE.Group();previewGroup.add(guide);diagnosticObjects.push(guide);
+ const major=['pelvis','spine_01','spine_02','spine_03','neck_01','Head','clavicle_l','upperarm_l','lowerarm_l','hand_l','clavicle_r','upperarm_r','lowerarm_r','hand_r','thigh_l','calf_l','foot_l','thigh_r','calf_r','foot_r','Hips_01','Spine_02','Spine1_03','Spine2_04','Neck_05','Head_06','LeftArm_035','LeftForeArm_036','LeftHand_037','RightArm_011','RightForeArm_012','RightHand_013','LeftUpLeg_064','LeftLeg_065','LeftFoot_066','RightUpLeg_059','RightLeg_060','RightFoot_061'];
+ const entries=[];
+ for(const name of major){
+  const bone=root.getObjectByName(name);if(!bone||!bone.isBone)continue;
+  const label=diagnosticLabel(name),axes=new THREE.AxesHelper(.19);
+  guide.add(label,axes);entries.push({bone,label,axes});
+ }
+ diagnosticMixers.push(()=>{for(const {bone,label,axes} of entries){
+  bone.updateWorldMatrix(true,false);
+  const p=new THREE.Vector3(),q=new THREE.Quaternion();bone.getWorldPosition(p);bone.getWorldQuaternion(q);
+  label.position.copy(p).add(new THREE.Vector3(0,.12,0));axes.position.copy(p);axes.quaternion.copy(q);
+  label.visible=el('showBoneLabels').checked;axes.visible=el('showBoneAxes').checked;
+ }});
+}
+function setupSourceComparison(selected){
+ if(!el('compareRigs').checked||!animationSource||selected==='celebration'||selected==='neutral')return;
+ const clip=animationSource.animations.find(a=>a.name===selected);if(!clip)return;
+ const source=cloneSkeleton(animationSource.scene);
+ source.position.set(1.5,0,0);source.updateMatrixWorld(true);
+ const bounds=new THREE.Box3().setFromObject(source),sz=new THREE.Vector3();bounds.getSize(sz);
+ if(sz.y>.001){const sc=1.75/sz.y*Number(el('soldierScale').value);source.scale.setScalar(sc);source.position.y=-bounds.min.y*sc+.12}
+ source.traverse(o=>{if(o.isMesh)o.visible=false});
+ previewGroup.add(source);diagnosticObjects.push(source);sourceActor=source;
+ const helper=new THREE.SkeletonHelper(source);helper.material.depthTest=false;previewGroup.add(helper);diagnosticObjects.push(helper);
+ sourceMixer=new THREE.AnimationMixer(source);const action=sourceMixer.clipAction(clip);if(selected==='Death01'){action.setLoop(THREE.LoopOnce,1);action.clampWhenFinished=true}action.play();
+ if(el('showBoneLabels').checked||el('showBoneAxes').checked)addBoneGuides(source);
+}
+function updateDiagnosticFrame(dt){
+ if(!el('pauseRig').checked){realisticMixer?.update(dt);sourceMixer?.update(dt)}
+ else {const time=Number(el('rigFrame').value)/100;
+  for(const mixer of [realisticMixer,sourceMixer])if(mixer){mixer.setTime(time);mixer.update(0)}
+ }
+ for(const update of diagnosticMixers)update();
+}
 function attachRealistic(){
  removeRealistic();
  if(mode!=='preview'||!el('realisticPreview').checked||!realisticTemplate)return;
@@ -172,7 +215,7 @@ function attachRealistic(){
  visual.traverse(o=>{if(o.isLight)o.visible=false;if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
  realisticActor=new THREE.Group();realisticActor.position.copy(proxy.position);realisticActor.rotation.copy(proxy.rotation);
  realisticActor.add(visual);previewGroup.add(realisticActor);realisticActor.updateMatrixWorld(true);
- if(el('showSkeleton').checked){rigHelper=new THREE.SkeletonHelper(visual);rigHelper.material.depthTest=false;rigHelper.material.transparent=true;rigHelper.material.opacity=.9;previewGroup.add(rigHelper)}
+ if(el('showSkeleton').checked||el('compareRigs').checked){rigHelper=new THREE.SkeletonHelper(visual);rigHelper.material.depthTest=false;rigHelper.material.transparent=true;rigHelper.material.opacity=.9;previewGroup.add(rigHelper)}
  updateRigDiagnostics(visual);
  proxy.userData.body.visible=false;proxy.userData.badge.visible=false;
  const selectedAnimation=el('realisticAnimation').value;
@@ -183,6 +226,8 @@ function attachRealistic(){
   if(original)clip=retargetClip(original,visual);
  }
  if(clip&&clip.tracks.length){realisticMixer=new THREE.AnimationMixer(visual);const action=realisticMixer.clipAction(clip);if(selectedAnimation==='Death01'){action.setLoop(THREE.LoopOnce,1);action.clampWhenFinished=true}action.play()}
+ if(el('showBoneLabels').checked||el('showBoneAxes').checked)addBoneGuides(visual);
+ setupSourceComparison(selectedAnimation);
  status(clip?'Rigged soldier • '+(selectedAnimation==='celebration'?'Celebration dance':selectedAnimation):'Loading combat animation…');
 }
 function loadRealistic(){
@@ -192,6 +237,7 @@ function loadRealistic(){
   realisticLoading=false;realisticTemplate=g.scene;realisticClip=g.animations[0]||null;attachRealistic();loadAnimationLibrary();
  },undefined,e=>{realisticLoading=false;el('realisticPreview').checked=false;status('Model files not uploaded yet. Use the v0.3.0 asset ZIP.');console.warn('Soldier asset missing',e)});
 }
+for(const id of ['compareRigs','showBoneLabels','showBoneAxes'])el(id).addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('showSkeleton').addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('realisticAnimation').addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('soldierScale').addEventListener('input',()=>{el('soldierScaleValue').textContent=Math.round(Number(el('soldierScale').value)*100)+'%';if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
@@ -203,7 +249,7 @@ el('battleBtn').onclick=()=>setMode('battle');el('previewBtn').onclick=()=>setMo
 const clock=new THREE.Clock();
 function animate(){
 requestAnimationFrame(animate);
-const dt=Math.min(clock.getDelta(),.05),t=performance.now()/1000;if(realisticMixer)realisticMixer.update(dt);
+const dt=Math.min(clock.getDelta(),.05),t=performance.now()/1000;updateDiagnosticFrame(dt);
 for(const a of [...actors.values(),...previewActors]){
 if(!a)continue;
 const u=a.userData;u.age+=dt;
