@@ -100,7 +100,7 @@ function resetCamera(){const from=camera.position.clone(),fromTarget=controls.ta
 // v0.3.0: opt-in rigged soldier preview. Battlefield pieces remain procedural.
 let realisticTemplate=null,realisticClip=null,realisticMixer=null,realisticActor=null,realisticLoading=false;
 const realisticLoader=new GLTFLoader();
-function removeRealistic(){if(realisticMixer){realisticMixer.stopAllAction();realisticMixer=null}if(realisticActor){previewGroup.remove(realisticActor);realisticActor=null}}
+function removeRealistic(){if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}if(realisticMixer){realisticMixer.stopAllAction();realisticMixer=null}if(realisticActor){previewGroup.remove(realisticActor);realisticActor=null}}
 // Retarget local joint rotations through each rig's rest-pose parent space.
 const BONE_MAP={
  pelvis:'Hips_01',spine_01:'Spine_02',spine_02:'Spine1_03',spine_03:'Spine2_04',neck_01:'Neck_05',Head:'Head_06',
@@ -109,7 +109,7 @@ const BONE_MAP={
  thigh_l:'LeftUpLeg_064',calf_l:'LeftLeg_065',foot_l:'LeftFoot_066',ball_l:'LeftToeBase_067',
  thigh_r:'RightUpLeg_059',calf_r:'RightLeg_060',foot_r:'RightFoot_061',ball_r:'RightToeBase_062'
 };
-let animationSource=null,retargetCache=new Map(),animationLoading=false;
+let animationSource=null,retargetCache=new Map(),animationLoading=false,rigHelper=null;
 function retargetClip(clip,target){
  // Convert joint-local motion into each destination bone's own bind-pose axes.
  // Preserve the destination's bind orientation, not the source rig's A/T-pose.
@@ -145,6 +145,18 @@ function loadAnimationLibrary(){
   if(mode==='preview'&&el('realisticPreview').checked)attachRealistic();
  },undefined,e=>{animationLoading=false;console.warn('Animation library failed to load',e);status('Animation library could not load; celebration remains available')});
 }
+function updateRigDiagnostics(visual){
+ const bones=[];visual.traverse(o=>{if(o.isBone)bones.push(o)});
+ const sourceBones=[];if(animationSource)animationSource.scene.traverse(o=>{if(o.isBone)sourceBones.push(o)});
+ const mappings=Object.entries(BONE_MAP).map(([src,dst])=>[src,dst,!!animationSource?.scene.getObjectByName(src),!!visual.getObjectByName(dst)]);
+ const found=mappings.filter(m=>m[2]&&m[3]).length;
+ const report='Soldier: '+bones.length+' bones | Quaternius: '+sourceBones.length+' bones | mapped: '+found+'/'+mappings.length;
+ el('rigDiagnostics').textContent=report;
+ console.group('Battlefield Chess rig diagnostics');
+ console.log(report);console.table(mappings.map(([source,target,sourceFound,targetFound])=>({source,target,sourceFound,targetFound})));
+ console.table(bones.map(b=>({name:b.name,parent:b.parent?.name,rotation:b.quaternion.toArray().map(n=>+n.toFixed(3))})));
+ console.groupEnd();
+}
 function attachRealistic(){
  removeRealistic();
  if(mode!=='preview'||!el('realisticPreview').checked||!realisticTemplate)return;
@@ -160,6 +172,8 @@ function attachRealistic(){
  visual.traverse(o=>{if(o.isLight)o.visible=false;if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
  realisticActor=new THREE.Group();realisticActor.position.copy(proxy.position);realisticActor.rotation.copy(proxy.rotation);
  realisticActor.add(visual);previewGroup.add(realisticActor);
+ if(el('showSkeleton').checked){rigHelper=new THREE.SkeletonHelper(visual);rigHelper.material.depthTest=false;rigHelper.material.transparent=true;rigHelper.material.opacity=.9;realisticActor.add(rigHelper)}
+ updateRigDiagnostics(visual);
  proxy.userData.body.visible=false;proxy.userData.badge.visible=false;
  const selectedAnimation=el('realisticAnimation').value;
  let clip=null;
@@ -178,13 +192,14 @@ function loadRealistic(){
   realisticLoading=false;realisticTemplate=g.scene;realisticClip=g.animations[0]||null;attachRealistic();loadAnimationLibrary();
  },undefined,e=>{realisticLoading=false;el('realisticPreview').checked=false;status('Model files not uploaded yet. Use the v0.3.0 asset ZIP.');console.warn('Soldier asset missing',e)});
 }
+el('showSkeleton').addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('realisticAnimation').addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('soldierScale').addEventListener('input',()=>{el('soldierScaleValue').textContent=Math.round(Number(el('soldierScale').value)*100)+'%';if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').checked)loadRealistic();else{removeRealistic();previewBuild()}});
-function previewBuild(){removeRealistic();previewActors.forEach(a=>previewGroup.remove(a));previewActors=[];[['whitePiece','whiteAnim','w',-1.5],['blackPiece','blackAnim','b',1.5]].forEach(([id,aid,color,x])=>{const a=soldier(el(id).value,color);a.position.set(x,.12,0);a.rotation.y=color==='w'?Math.PI/2:-Math.PI/2;setState(a,el(aid).value);previewGroup.add(a);previewActors.push(a)});if(el('realisticPreview').checked&&realisticTemplate)attachRealistic()}
+function previewBuild(){removeRealistic();previewActors.forEach(a=>previewGroup.remove(a));previewActors=[];[['whitePiece','whiteAnim','w',-1.5],['blackPiece','blackAnim','b',1.5]].forEach(([id,aid,color,x])=>{if(el(id).value==='none'){previewActors.push(null);return}const a=soldier(el(id).value,color);a.position.set(x,.12,0);a.rotation.y=color==='w'?Math.PI/2:-Math.PI/2;setState(a,el(aid).value);previewGroup.add(a);previewActors.push(a)});if(el('realisticPreview').checked&&realisticTemplate)attachRealistic()}
 function setMode(next){mode=next;boardGroup.visible=next==='battle';previewGroup.visible=next==='preview';el('battleControls').classList.toggle('hide',next!=='battle');el('previewControls').classList.toggle('hide',next!=='preview');el('battleBtn').classList.toggle('primary',next==='battle');el('previewBtn').classList.toggle('primary',next==='preview');if(next==='preview'){previewBuild();status('Animation preview studio');if(el('realisticPreview').checked)loadRealistic()}else{removeRealistic();status('Select a piece to move')};resetCamera()}
-for(const [id,initial] of [['whitePiece','p'],['blackPiece','q']]){for(const [key,name] of Object.entries(TYPES)){const o=document.createElement('option');o.value=key;o.textContent=`${SYMBOL[id==='whitePiece'?'w':'b'][key]} ${name}`;el(id).append(o)}el(id).value=initial;el(id).addEventListener('change',previewBuild)}for(const id of ['whiteAnim','blackAnim']){for(const name of ANIMS){const o=document.createElement('option');o.value=name;o.textContent=name[0].toUpperCase()+name.slice(1);el(id).append(o)}el(id).value=id==='blackAnim'?'targeted':'idle';el(id).addEventListener('change',previewBuild)}
-el('battleBtn').onclick=()=>setMode('battle');el('previewBtn').onclick=()=>setMode('preview');el('cameraBtn').onclick=resetCamera;el('previewCamera').onclick=resetCamera;el('resetBtn').onclick=()=>{if(busy)return;game.reset();syncBoard();clearHighlights();selected=null;setMode('battle');status('New game ready')};el('undoBtn').onclick=()=>{if(busy)return;game.undo();syncBoard();clearHighlights();selected=null;status('Last move undone')};el('icons').onchange=()=>{for(const a of [...actors.values(),...previewActors])a.userData.badge.visible=el('icons').checked};el('testAttack').onclick=async()=>{if(busy)return;busy=true;const panel=document.getElementById('ui');if(!panel.classList.contains('collapsed'))document.getElementById('uiToggle').click();await wait(250);const [a,b]=previewActors;setState(a,'highlighted');setState(b,'targeted');status('Preview: acquiring target');await cameraFocus(a,b);setState(a,'attacking');await wait(850);await effect(a,b,a.userData.type);setState(b,'dying');await wait(1250);previewBuild();resetCamera();status('Preview attack complete');busy=false};
+for(const [id,initial] of [['whitePiece','p'],['blackPiece','q']]){if(id==='blackPiece'){const none=document.createElement('option');none.value='none';none.textContent='None (hide black piece)';el(id).append(none)}for(const [key,name] of Object.entries(TYPES)){const o=document.createElement('option');o.value=key;o.textContent=`${SYMBOL[id==='whitePiece'?'w':'b'][key]} ${name}`;el(id).append(o)}el(id).value=initial;el(id).addEventListener('change',previewBuild)}for(const id of ['whiteAnim','blackAnim']){for(const name of ANIMS){const o=document.createElement('option');o.value=name;o.textContent=name[0].toUpperCase()+name.slice(1);el(id).append(o)}el(id).value=id==='blackAnim'?'targeted':'idle';el(id).addEventListener('change',previewBuild)}
+el('battleBtn').onclick=()=>setMode('battle');el('previewBtn').onclick=()=>setMode('preview');el('cameraBtn').onclick=resetCamera;el('previewCamera').onclick=resetCamera;el('resetBtn').onclick=()=>{if(busy)return;game.reset();syncBoard();clearHighlights();selected=null;setMode('battle');status('New game ready')};el('undoBtn').onclick=()=>{if(busy)return;game.undo();syncBoard();clearHighlights();selected=null;status('Last move undone')};el('icons').onchange=()=>{for(const a of [...actors.values(),...previewActors])if(a)a.userData.badge.visible=el('icons').checked};el('testAttack').onclick=async()=>{if(busy)return;busy=true;const panel=document.getElementById('ui');if(!panel.classList.contains('collapsed'))document.getElementById('uiToggle').click();await wait(250);const [a,b]=previewActors;setState(a,'highlighted');setState(b,'targeted');status('Preview: acquiring target');await cameraFocus(a,b);setState(a,'attacking');await wait(850);await effect(a,b,a.userData.type);setState(b,'dying');await wait(1250);previewBuild();resetCamera();status('Preview attack complete');busy=false};
 const clock=new THREE.Clock();
 function animate(){
 requestAnimationFrame(animate);
