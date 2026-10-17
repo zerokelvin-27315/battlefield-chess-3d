@@ -97,45 +97,35 @@ flash(origin,0xffcc76,.17);const bullet=spawn(new THREE.SphereGeometry(.045,8,6)
 async function walk(actor,target,type){const start=actor.position.clone(),end=new THREE.Vector3(target.x,.12,target.z);setState(actor,'moving');await tween(type==='n'?650:950,k=>{actor.position.lerpVectors(start,end,k);if(type==='n')actor.position.y+=Math.sin(k*Math.PI)*1.9});setState(actor,'idle')}
 async function performMove(from,to){busy=true;clearHighlights();const attacker=actors.get(from),type=attacker.userData.type;const move=game.move({from,to,promotion:'q'});if(!move){busy=false;return}const enPassant=move.flags.includes('e');const capturedSquare=enPassant?to[0]+from[1]:to;const victim=actors.get(capturedSquare);selected=null;legal=[];status(victim?`${TYPES[type]} attacks ${TYPES[victim.userData.type]}!`:`${TYPES[type]} advances to ${to}`);const dest=squareToWorld(to);if(victim){setState(victim,'targeted');if(el('cinematic').checked)await cameraFocus(attacker,victim);setState(attacker,'attacking');await wait(type==='r'?950:650);await effect(attacker,victim,type);setState(victim,'dying');await wait(650);setState(attacker,'idle');await walk(attacker,dest,type);await tween(650,k=>{victim.position.y=.12-k*1.7;victim.scale.setScalar(1-.25*k)});boardGroup.remove(victim);actors.delete(capturedSquare)}else await walk(attacker,dest,type);actors.delete(from);actors.set(to,attacker);if(move.flags.includes('k')||move.flags.includes('q')||move.flags.includes('e')||move.flags.includes('p'))syncBoard();if(victim&&el('cinematic').checked)resetCamera();updateTurn();status(game.isGameOver()?'Game over':`${game.turn()==='w'?'White':'Black'} to move`);busy=false}
 function resetCamera(){const from=camera.position.clone(),fromTarget=controls.target.clone(),to=mode==='battle'?new THREE.Vector3(10,15,16):new THREE.Vector3(6,5,8);tween(600,k=>{camera.position.lerpVectors(from,to,k);controls.target.lerpVectors(fromTarget,new THREE.Vector3(0,0,0),k);controls.update()})}
-// v0.3.0: opt-in rigged soldier preview. Battlefield pieces remain procedural.
+// v0.4.0 three-way rig comparison. Battlefield pieces remain procedural.
 let realisticTemplate=null,realisticClip=null,realisticMixer=null,realisticActor=null,realisticLoading=false;
+let referenceTemplate=null,referenceMixer=null,referenceActor=null,referenceLoading=false;
 const realisticLoader=new GLTFLoader();
-function removeRealistic(){for(const o of diagnosticObjects){previewGroup.remove(o);o.traverse(x=>{if(x.isSprite){x.material.map?.dispose();x.material.dispose()}if(x.isAxesHelper){x.geometry.dispose();x.material.dispose()}})}diagnosticObjects=[];sourceActor=null;sourceMixer=null;diagnosticMixers=[];if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}if(realisticMixer){realisticMixer.stopAllAction();realisticMixer=null}if(realisticActor){previewGroup.remove(realisticActor);realisticActor=null}}
-// Retarget local joint rotations through each rig's rest-pose parent space.
+function removeRealistic(){for(const mixer of [realisticMixer,referenceMixer,sourceMixer])mixer?.stopAllAction();realisticMixer=referenceMixer=sourceMixer=null;for(const o of diagnosticObjects){previewGroup.remove(o);o.traverse(x=>{if(x.isSprite){x.material.map?.dispose();x.material.dispose()}if(x.isAxesHelper){x.geometry.dispose();x.material.dispose()}if(x.isLine){x.geometry.dispose();if(Array.isArray(x.material))x.material.forEach(m=>m.dispose());else x.material.dispose()}})}diagnosticObjects=[];sourceActor=referenceActor=null;diagnosticMixers=[];if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}if(realisticActor){previewGroup.remove(realisticActor);realisticActor=null}for(const a of previewActors)if(a?.userData.body){a.userData.body.visible=true;a.userData.badge.visible=el('icons').checked}}
+// Retarget in corresponding parent-rest frames, preserving the destination bind pose.
 const BONE_MAP={
- pelvis:'Hips_01',spine_01:'Spine_02',spine_02:'Spine1_03',spine_03:'Spine2_04',neck_01:'Neck_05',Head:'Head_06',
+ root:'_rootJoint',pelvis:'Hips_01',spine_01:'Spine_02',spine_02:'Spine1_03',spine_03:'Spine2_04',neck_01:'Neck_05',Head:'Head_06',
  clavicle_l:'LeftShoulder_00',upperarm_l:'LeftArm_035',lowerarm_l:'LeftForeArm_036',hand_l:'LeftHand_037',
  clavicle_r:'RightShoulder_010',upperarm_r:'RightArm_011',lowerarm_r:'RightForeArm_012',hand_r:'RightHand_013',
- thigh_l:'LeftUpLeg_064',calf_l:'LeftLeg_065',foot_l:'LeftFoot_066',ball_l:'LeftToeBase_067',
- thigh_r:'RightUpLeg_059',calf_r:'RightLeg_060',foot_r:'RightFoot_061',ball_r:'RightToeBase_062'
+ thigh_l:'LeftUpLeg_064',calf_l:'LeftLeg_065',foot_l:'LeftFoot_066',ball_l:'LeftToeBase_067',ball_leaf_l:'LeftToeEnd_068',
+ thigh_r:'RightUpLeg_059',calf_r:'RightLeg_060',foot_r:'RightFoot_061',ball_r:'RightToeBase_062',ball_leaf_r:'RightToeEnd_063'
 };
-let animationSource=null,retargetCache=new Map(),animationLoading=false,rigHelper=null,sourceActor=null,sourceMixer=null,diagnosticObjects=[],diagnosticMixers=[];
-function retargetClip(clip,target){
- // Convert joint-local motion into each destination bone's own bind-pose axes.
- // Preserve the destination's bind orientation, not the source rig's A/T-pose.
- const source=animationSource.scene;source.updateMatrixWorld(true);target.updateMatrixWorld(true);
- const tracks=[];
- for(const track of clip.tracks){
-  if(!track.name.endsWith('.quaternion'))continue;
-  const sourceName=track.name.slice(0,-'.quaternion'.length).split('/').pop();
-  const targetName=BONE_MAP[sourceName];if(!targetName)continue;
-  const src=source.getObjectByName(sourceName),dst=target.getObjectByName(targetName);
-  if(!src||!dst)continue;
-  const sourceWorld=new THREE.Quaternion(),targetWorld=new THREE.Quaternion();
-  src.getWorldQuaternion(sourceWorld);dst.getWorldQuaternion(targetWorld);
-  const axes=targetWorld.clone().invert().multiply(sourceWorld),axesInverse=axes.clone().invert();
-  const sourceRestInverse=src.quaternion.clone().invert(),targetRest=dst.quaternion.clone();
-  const values=[];
-  for(let i=0;i<track.values.length;i+=4){
-   const sampled=new THREE.Quaternion().fromArray(track.values,i);
-   const localDelta=sourceRestInverse.clone().multiply(sampled);
-   const converted=axes.clone().multiply(localDelta).multiply(axesInverse);
-   const output=targetRest.clone().multiply(converted).normalize();
-   values.push(output.x,output.y,output.z,output.w);
-  }
-  tracks.push(new THREE.QuaternionKeyframeTrack(targetName+'.quaternion',track.times,values));
+let animationSource=null,retargetCache=new Map(),animationLoading=false,rigHelper=null,sourceActor=null,sourceMixer=null,diagnosticObjects=[],diagnosticMixers=[],poseRefresh=0;
+for(const side of ['l','r'])for(const [finger,dest] of Object.entries({index:'Index',middle:'Middle',ring:'Ring',pinky:'Pinky',thumb:'Thumb'}))for(let i=1;i<=4;i++){
+ const key=finger+'_0'+i+(i===4?'_leaf':'')+'_'+side,base=side==='l'?{thumb:39,middle:43,ring:47,pinky:51,index:55}[finger]:{thumb:15,middle:19,ring:23,pinky:27,index:31}[finger],number=base+i-1;
+ BONE_MAP[key]=(side==='l'?'LeftHand':'RightHand')+dest+i+'_'+String(number).padStart(3,'0');
+}
+function trackNodeName(name){const cut=name.lastIndexOf('.');return (cut<0?name:name.slice(0,cut)).split('/').pop().replace(/^\.bones\[/,'').replace(/\]$/,'')}
+function relativeWorldQuaternion(root,node){root.updateMatrixWorld(true);node.updateMatrixWorld(true);const rq=new THREE.Quaternion(),nq=new THREE.Quaternion();root.getWorldQuaternion(rq);node.getWorldQuaternion(nq);return rq.invert().multiply(nq).normalize()}
+function retargetClip(clip,target,sourceScale,targetScale){
+ const source=animationSource.scene;source.updateMatrixWorld(true);target.updateMatrixWorld(true);const tracks=[],ratio=sourceScale/targetScale;
+ for(const track of clip.tracks){const sourceName=trackNodeName(track.name),targetName=BONE_MAP[sourceName];if(!targetName)continue;const src=source.getObjectByName(sourceName),dst=target.getObjectByName(targetName);if(!src||!dst)continue;
+  const axes=relativeWorldQuaternion(target,dst.parent).invert().multiply(relativeWorldQuaternion(source,src.parent)).normalize(),inverseAxes=axes.clone().invert();
+  if(track.name.endsWith('.quaternion')){const sourceRestInverse=src.quaternion.clone().invert(),targetRest=dst.quaternion.clone(),values=[];for(let i=0;i<track.values.length;i+=4){const sampled=new THREE.Quaternion().fromArray(track.values,i),sourceDelta=sampled.multiply(sourceRestInverse),targetDelta=axes.clone().multiply(sourceDelta).multiply(inverseAxes),out=targetDelta.multiply(targetRest).normalize();values.push(out.x,out.y,out.z,out.w)}tracks.push(new THREE.QuaternionKeyframeTrack(targetName+'.quaternion',track.times,values))}
+  else if(track.name.endsWith('.position')){const values=[];for(let i=0;i<track.values.length;i+=3){const p=new THREE.Vector3().fromArray(track.values,i).sub(src.position).applyQuaternion(axes).multiplyScalar(ratio).add(dst.position);values.push(p.x,p.y,p.z)}tracks.push(new THREE.VectorKeyframeTrack(targetName+'.position',track.times,values))}
+  else if(track.name.endsWith('.scale')){const values=[];for(let i=0;i<track.values.length;i+=3){const s=new THREE.Vector3().fromArray(track.values,i),rest=src.scale.clone();for(const k of ['x','y','z'])s[k]=dst.scale[k]*(Math.abs(rest[k])>1e-8?s[k]/rest[k]:1);values.push(s.x,s.y,s.z)}tracks.push(new THREE.VectorKeyframeTrack(targetName+'.scale',track.times,values))}
  }
- return new THREE.AnimationClip('Retargeted_'+clip.name,clip.duration,tracks);
+ return new THREE.AnimationClip('Retargeted_'+clip.name,clip.duration,tracks)
 }
 function loadAnimationLibrary(){
  if(animationSource||animationLoading)return;
@@ -145,17 +135,14 @@ function loadAnimationLibrary(){
   if(mode==='preview'&&el('realisticPreview').checked)attachRealistic();
  },undefined,e=>{animationLoading=false;console.warn('Animation library failed to load',e);status('Animation library could not load; celebration remains available')});
 }
-function updateRigDiagnostics(visual){
- const bones=[];visual.traverse(o=>{if(o.isBone)bones.push(o)});
- const sourceBones=[];if(animationSource)animationSource.scene.traverse(o=>{if(o.isBone)sourceBones.push(o)});
- const mappings=Object.entries(BONE_MAP).map(([src,dst])=>[src,dst,!!animationSource?.scene.getObjectByName(src),!!visual.getObjectByName(dst)]);
- const found=mappings.filter(m=>m[2]&&m[3]).length;
- const report='Soldier: '+bones.length+' bones | Quaternius: '+sourceBones.length+' bones | mapped: '+found+'/'+mappings.length;
- el('rigDiagnostics').textContent=report;
- console.group('Battlefield Chess rig diagnostics');
- console.log(report);console.table(mappings.map(([source,target,sourceFound,targetFound])=>({source,target,sourceFound,targetFound})));
- console.table(bones.map(b=>({name:b.name,parent:b.parent?.name,rotation:b.quaternion.toArray().map(n=>+n.toFixed(3))})));
- console.groupEnd();
+function boneList(root){const bones=[];root?.traverse(o=>{if(o.isBone)bones.push(o)});return bones}
+function updateRigDiagnostics(visual,reference){
+ const sourceBones=boneList(animationSource.scene),refBones=boneList(reference),targetBones=boneList(visual),mappings=Object.entries(BONE_MAP).map(([source,target])=>({source,target,sourceFound:!!animationSource.scene.getObjectByName(source),targetFound:!!visual.getObjectByName(target)}));
+ for(const row of mappings){const s=animationSource.scene.getObjectByName(row.source),d=visual.getObjectByName(row.target);row.sourceParent=s?.parent?.name;row.targetParent=d?.parent?.name;row.parentMatch=BONE_MAP[row.sourceParent]===row.targetParent}
+ const matched=mappings.filter(m=>m.sourceFound&&m.targetFound).length,split=mappings.filter(m=>m.sourceFound&&m.targetFound&&!m.parentMatch);let total=0,max=0,maxName='';
+ let refTotal=0,refMax=0,refMaxName='';for(const m of mappings){const s=animationSource.scene.getObjectByName(m.source),r=reference.getObjectByName(m.source),d=visual.getObjectByName(m.target);if(!s||!r||!d)continue;const angle=THREE.MathUtils.radToDeg(s.quaternion.angleTo(d.quaternion)),refAngle=THREE.MathUtils.radToDeg(s.quaternion.angleTo(r.quaternion));total+=angle;refTotal+=refAngle;if(angle>max){max=angle;maxName=m.source}if(refAngle>refMax){refMax=refAngle;refMaxName=m.source}}
+ const report='UAL/reference '+sourceBones.length+'/'+refBones.length+' joints • soldier mapped '+matched+'/'+mappings.length+' • parent-path differences '+split.length+' • rest delta source-to-soldier avg '+(total/Math.max(1,matched)).toFixed(1)+'°, max '+max.toFixed(1)+'° ('+maxName+'); source-to-reference avg '+(refTotal/Math.max(1,matched)).toFixed(1)+'°, max '+refMax.toFixed(1)+'° ('+refMaxName+')';el('rigDiagnostics').textContent=report;
+ console.group('Battlefield Chess rig diagnostics');console.log(report);console.table(mappings);console.table(targetBones.map(b=>({name:b.name,parent:b.parent?.name,rotation:b.quaternion.toArray().map(n=>+n.toFixed(3))})));console.groupEnd();
 }
 function diagnosticLabel(name){
  const c=document.createElement('canvas');c.width=384;c.height=64;
@@ -167,82 +154,69 @@ function diagnosticLabel(name){
 }
 function addBoneGuides(root){
  const guide=new THREE.Group();previewGroup.add(guide);diagnosticObjects.push(guide);
- const major=['pelvis','spine_02','Head','upperarm_l','upperarm_r','thigh_l','thigh_r','calf_l','calf_r','Hips_01','Spine1_03','Head_06','LeftArm_035','RightArm_011','LeftUpLeg_064','RightUpLeg_059','LeftLeg_065','RightLeg_060'];
+ const major=['root','pelvis','spine_01','spine_02','spine_03','neck_01','Head','clavicle_l','upperarm_l','lowerarm_l','hand_l','clavicle_r','upperarm_r','lowerarm_r','hand_r','thigh_l','calf_l','foot_l','thigh_r','calf_r','foot_r','_rootJoint','Hips_01','Spine_02','Spine1_03','Spine2_04','Neck_05','Head_06','LeftShoulder_00','LeftArm_035','LeftForeArm_036','LeftHand_037','RightShoulder_010','RightArm_011','RightForeArm_012','RightHand_013','LeftUpLeg_064','LeftLeg_065','LeftFoot_066','RightUpLeg_059','RightLeg_060','RightFoot_061'];
  const entries=[];
  for(const name of major){
   const bone=root.getObjectByName(name);if(!bone||!bone.isBone)continue;
-  const label=diagnosticLabel(name),axes=new THREE.AxesHelper(.16);
+  const label=diagnosticLabel(name),axes=new THREE.AxesHelper(.13);
   guide.add(label,axes);entries.push({bone,label,axes});
  }
  diagnosticMixers.push(()=>{for(const {bone,label,axes} of entries){
   bone.updateWorldMatrix(true,false);
   const p=new THREE.Vector3(),q=new THREE.Quaternion();bone.getWorldPosition(p);bone.getWorldQuaternion(q);
-  label.position.copy(p).add(new THREE.Vector3(0,.09,0));axes.position.copy(p);axes.quaternion.copy(q);
+  label.position.copy(p).add(new THREE.Vector3(0,.075,0));label.scale.set(.38,.064,1);axes.position.copy(p);axes.quaternion.copy(q);
   label.visible=el('showBoneLabels').checked;axes.visible=el('showBoneAxes').checked;
  }});
 }
-function setupSourceComparison(selected){
- if(!el('compareRigs').checked||!animationSource||selected==='celebration'||selected==='neutral')return;
- const clip=animationSource.animations.find(a=>a.name===selected);if(!clip)return;
- const source=cloneSkeleton(animationSource.scene);
- source.position.set(1.5,0,0);source.updateMatrixWorld(true);
- const bounds=new THREE.Box3().setFromObject(source),sz=new THREE.Vector3();bounds.getSize(sz);
- if(sz.y>.001){const sc=1.75/sz.y*Number(el('soldierScale').value);source.scale.setScalar(sc);source.position.y=-bounds.min.y*sc+.12}
- source.traverse(o=>{if(o.isMesh)o.visible=false});
- previewGroup.add(source);diagnosticObjects.push(source);sourceActor=source;
- const helper=new THREE.SkeletonHelper(source);helper.material.depthTest=false;previewGroup.add(helper);diagnosticObjects.push(helper);
- sourceMixer=new THREE.AnimationMixer(source);const action=sourceMixer.clipAction(clip);if(selected==='Death01'){action.setLoop(THREE.LoopOnce,1);action.clampWhenFinished=true}action.play();
- if(el('showBoneLabels').checked||el('showBoneAxes').checked)addBoneGuides(source);
+function normalizeRig(root,x,userScale){const b=new THREE.Box3().setFromObject(root),size=new THREE.Vector3();b.getSize(size);const scale=size.y>.001?1.75/size.y*userScale:1;root.scale.setScalar(scale);root.position.set(x-((b.min.x+b.max.x)/2)*scale,-b.min.y*scale+.12,-((b.min.z+b.max.z)/2)*scale);root.updateMatrixWorld(true);return scale}
+function setRigMeshVisibility(root,visible){root?.traverse(o=>{if(o.isMesh)o.visible=visible})}
+function addRigHelper(root,id){const helper=new THREE.SkeletonHelper(root);helper.material.depthTest=false;helper.material.transparent=true;helper.material.opacity=.88;helper.visible=el(id).checked;previewGroup.add(helper);diagnosticObjects.push(helper);return helper}
+function playSynced(mixer,clip,name){if(!mixer||!clip)return;const action=mixer.clipAction(clip);if(name==='Death01'){action.setLoop(THREE.LoopOnce,1);action.clampWhenFinished=true}action.play()}
+function setupSourceComparison(selected,userScale){
+ if(!animationSource||!referenceTemplate)return;
+ const source=cloneSkeleton(animationSource.scene);const sourceScale=normalizeRig(source,-2.3,userScale);setRigMeshVisibility(source,el('showSourceMesh').checked);previewGroup.add(source);diagnosticObjects.push(source);sourceActor=source;addRigHelper(source,'showSourceSkeleton');sourceMixer=new THREE.AnimationMixer(source);
+ const reference=cloneSkeleton(referenceTemplate);normalizeRig(reference,0,userScale);setRigMeshVisibility(reference,el('showReferenceMesh').checked);previewGroup.add(reference);diagnosticObjects.push(reference);referenceActor=reference;addRigHelper(reference,'showReferenceSkeleton');referenceMixer=new THREE.AnimationMixer(reference);
+ const clip=animationSource.animations.find(a=>a.name===selected);if(clip){playSynced(sourceMixer,clip,selected);playSynced(referenceMixer,clip,selected)}
+ addBoneGuides(source);addBoneGuides(reference);return sourceScale;
 }
+function updatePoseDiagnostics(){if(!animationSource||!sourceActor||!referenceActor||!realisticActor)return;const lines=[];for(const [src,dst] of [['pelvis','Hips_01'],['spine_02','Spine1_03'],['spine_03','Spine2_04'],['neck_01','Neck_05'],['Head','Head_06'],['upperarm_l','LeftArm_035'],['thigh_l','LeftUpLeg_064']]){const s=sourceActor.getObjectByName(src),a=referenceActor.getObjectByName(src),b=realisticActor.getObjectByName(dst);if(!s||!a||!b)continue;const deg=o=>o.rotation.toArray().slice(0,3).map(v=>THREE.MathUtils.radToDeg(v).toFixed(0)).join('/');lines.push(src+' XYZ° source '+deg(s)+' / ref '+deg(a)+' / soldier '+deg(b))}el('rigPoseDiagnostics').textContent=lines.join(' | ')}
 function updateDiagnosticFrame(dt){
- if(!el('pauseRig').checked){realisticMixer?.update(dt);sourceMixer?.update(dt)}
- else {const time=Number(el('rigFrame').value)/100;
-  for(const mixer of [realisticMixer,sourceMixer])if(mixer){mixer.setTime(time);mixer.update(0)}
- }
+ if(!el('pauseRig').checked){for(const mixer of [sourceMixer,referenceMixer,realisticMixer])mixer?.update(dt)}
+ else {const time=Number(el('rigFrame').value)/100;for(const mixer of [sourceMixer,referenceMixer,realisticMixer])if(mixer){mixer.setTime(time);mixer.update(0)}}
  for(const update of diagnosticMixers)update();
+ poseRefresh+=dt;if(poseRefresh>.2){poseRefresh=0;updatePoseDiagnostics()}
 }
 function attachRealistic(){
  removeRealistic();
- if(mode!=='preview'||!el('realisticPreview').checked||!realisticTemplate)return;
- const proxy=previewActors[0];if(!proxy)return;
- const visual=cloneSkeleton(realisticTemplate);
- visual.updateMatrixWorld(true);
- const bounds=new THREE.Box3().setFromObject(visual),size=new THREE.Vector3(),center=new THREE.Vector3();
- bounds.getSize(size);bounds.getCenter(center);
- if(size.y<.001)return;
- const scale=1.75/size.y*Number(el('soldierScale').value);
- visual.scale.setScalar(scale);
- visual.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+ if(mode!=='preview'||!el('realisticPreview').checked||!realisticTemplate||!referenceTemplate||!animationSource)return;
+ const proxy=previewActors[0];if(!proxy)return;const userScale=Number(el('soldierScale').value),visual=cloneSkeleton(realisticTemplate);const scale=normalizeRig(visual,2.3,userScale);
  visual.traverse(o=>{if(o.isLight)o.visible=false;if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
- realisticActor=new THREE.Group();realisticActor.position.copy(proxy.position);realisticActor.rotation.copy(proxy.rotation);
- realisticActor.add(visual);previewGroup.add(realisticActor);realisticActor.updateMatrixWorld(true);
- if(el('showSkeleton').checked||el('compareRigs').checked){rigHelper=new THREE.SkeletonHelper(visual);rigHelper.material.depthTest=false;rigHelper.material.transparent=true;rigHelper.material.opacity=.9;previewGroup.add(rigHelper)}
- updateRigDiagnostics(visual);
+ realisticActor=visual;previewGroup.add(visual);setRigMeshVisibility(visual,el('showSoldierMesh').checked);if(el('showSkeleton').checked)rigHelper=addRigHelper(visual,'showSkeleton');
  proxy.userData.body.visible=false;proxy.userData.badge.visible=false;
  const selectedAnimation=el('realisticAnimation').value;
  let clip=null;
  if(selectedAnimation==='celebration')clip=realisticClip;
  else if(animationSource){
   const original=animationSource.animations.find(a=>a.name===selectedAnimation);
-  if(original)clip=retargetClip(original,visual);
+  if(original)clip=retargetClip(original,visual,1.75/Math.max(.001,new THREE.Box3().setFromObject(animationSource.scene).getSize(new THREE.Vector3()).y)*userScale,scale);
  }
- if(clip&&clip.tracks.length){realisticMixer=new THREE.AnimationMixer(visual);const action=realisticMixer.clipAction(clip);if(selectedAnimation==='Death01'){action.setLoop(THREE.LoopOnce,1);action.clampWhenFinished=true}action.play()}
- if(el('showBoneLabels').checked||el('showBoneAxes').checked)addBoneGuides(visual);
- setupSourceComparison(selectedAnimation);
- status(clip?'Rigged soldier • '+(selectedAnimation==='celebration'?'Celebration dance':selectedAnimation):'Loading combat animation…');
+ if(clip?.tracks.length){realisticMixer=new THREE.AnimationMixer(visual);playSynced(realisticMixer,clip,selectedAnimation)}
+ setupSourceComparison(selectedAnimation,userScale);updateRigDiagnostics(visual,referenceActor);addBoneGuides(visual);updatePoseDiagnostics();
+ status(selectedAnimation==='celebration'?'Soldier • Celebration Dance (embedded animation)':clip?'Synchronized Quaternius • '+selectedAnimation:'Rest-pose comparison');
 }
 function loadRealistic(){
- if(realisticTemplate){attachRealistic();loadAnimationLibrary();return}
- if(realisticLoading)return;realisticLoading=true;status('Loading rigged soldier model…');
- realisticLoader.load('./assets/soldier/scene.gltf',g=>{
-  realisticLoading=false;realisticTemplate=g.scene;realisticClip=g.animations[0]||null;attachRealistic();loadAnimationLibrary();
- },undefined,e=>{realisticLoading=false;el('realisticPreview').checked=false;status('Model files not uploaded yet. Use the v0.3.0 asset ZIP.');console.warn('Soldier asset missing',e)});
+ if(!realisticTemplate&&!realisticLoading){realisticLoading=true;status('Loading soldier rig…');realisticLoader.load('./assets/soldier/scene.gltf',g=>{realisticLoading=false;realisticTemplate=g.scene;realisticClip=g.animations[0]||null;attachRealistic()},undefined,e=>{realisticLoading=false;status('Soldier model failed to load; check assets/soldier/');console.warn('Soldier asset missing',e)})}
+ if(!referenceTemplate&&!referenceLoading){referenceLoading=true;realisticLoader.load('./assets/reference/scene.gltf',g=>{referenceLoading=false;referenceTemplate=g.scene;attachRealistic()},undefined,e=>{referenceLoading=false;status('Quaternius reference failed to load; check assets/reference/');console.warn('Reference rig asset missing',e)})}
+ loadAnimationLibrary();if(realisticTemplate&&referenceTemplate&&animationSource)attachRealistic();
 }
-for(const id of ['compareRigs','showBoneLabels','showBoneAxes'])el(id).addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
-el('showSkeleton').addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
+function refreshRigVisibility(){setRigMeshVisibility(sourceActor,el('showSourceMesh').checked);setRigMeshVisibility(referenceActor,el('showReferenceMesh').checked);setRigMeshVisibility(realisticActor,el('showSoldierMesh').checked);if(rigHelper)rigHelper.visible=el('showSkeleton').checked;for(const o of diagnosticObjects)if(o.isSkeletonHelper){if(o.root===sourceActor)o.visible=el('showSourceSkeleton').checked;else if(o.root===referenceActor)o.visible=el('showReferenceSkeleton').checked}}
+for(const id of ['showSourceMesh','showSourceSkeleton','showReferenceMesh','showReferenceSkeleton','showSoldierMesh','showSkeleton'])el(id).addEventListener('change',refreshRigVisibility);
+for(const id of ['showBoneLabels','showBoneAxes'])el(id).addEventListener('change',()=>{for(const update of diagnosticMixers)update()});
 el('realisticAnimation').addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('soldierScale').addEventListener('input',()=>{el('soldierScaleValue').textContent=Math.round(Number(el('soldierScale').value)*100)+'%';if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').checked)loadRealistic();else{removeRealistic();previewBuild()}});
+el('pauseRig').addEventListener('change',()=>{if(el('pauseRig').checked)el('rigFrame').value=Math.round((realisticMixer?.time||0)*100)});
+el('rigFrame').addEventListener('input',()=>{el('pauseRig').checked=true;const t=Number(el('rigFrame').value)/100;for(const mixer of [sourceMixer,referenceMixer,realisticMixer])if(mixer){mixer.setTime(t);mixer.update(0)}updatePoseDiagnostics()});
 function previewBuild(){removeRealistic();previewActors.forEach(a=>{if(a)previewGroup.remove(a)});previewActors=[];[['whitePiece','whiteAnim','w',-1.5],['blackPiece','blackAnim','b',1.5]].forEach(([id,aid,color,x])=>{if(el(id).value==='none'){previewActors.push(null);return}const a=soldier(el(id).value,color);a.position.set(x,.12,0);a.rotation.y=color==='w'?Math.PI/2:-Math.PI/2;setState(a,el(aid).value);previewGroup.add(a);previewActors.push(a)});if(el('realisticPreview').checked&&realisticTemplate)attachRealistic()}
 function setMode(next){mode=next;boardGroup.visible=next==='battle';previewGroup.visible=next==='preview';el('battleControls').classList.toggle('hide',next!=='battle');el('previewControls').classList.toggle('hide',next!=='preview');el('battleBtn').classList.toggle('primary',next==='battle');el('previewBtn').classList.toggle('primary',next==='preview');if(next==='preview'){previewBuild();status('Animation preview studio');if(el('realisticPreview').checked)loadRealistic()}else{removeRealistic();status('Select a piece to move')};resetCamera()}
 for(const [id,initial] of [['whitePiece','p'],['blackPiece','q']]){if(id==='blackPiece'){const none=document.createElement('option');none.value='none';none.textContent='None (hide black piece)';el(id).append(none)}for(const [key,name] of Object.entries(TYPES)){const o=document.createElement('option');o.value=key;o.textContent=`${SYMBOL[id==='whitePiece'?'w':'b'][key]} ${name}`;el(id).append(o)}el(id).value=initial;el(id).addEventListener('change',previewBuild)}for(const id of ['whiteAnim','blackAnim']){for(const name of ANIMS){const o=document.createElement('option');o.value=name;o.textContent=name[0].toUpperCase()+name.slice(1);el(id).append(o)}el(id).value=id==='blackAnim'?'targeted':'idle';el(id).addEventListener('change',previewBuild)}

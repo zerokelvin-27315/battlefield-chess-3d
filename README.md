@@ -1,4 +1,4 @@
-# Battlefield Chess 3D — Prototype 1
+# Battlefield Chess 3D — Prototype 1 (v0.4.0)
 
 Playable 3D chess with procedural military characters, rocky terrain, a character animation preview studio, and cinematic capture sequences.
 
@@ -19,12 +19,23 @@ Cloudflare Pages: connect this GitHub repository, select branch `main`, framewor
 - Standard chess rules through chess.js
 - Six military-themed procedural characters in two army colors
 - Select a piece and legal destination
-- Orbit/zoom/pan camera
+- Orbit/zoom camera
 - Animated movement and capture effects
-- Separate two-character preview studio with animation selectors
-- Toggleable camera-facing chess symbols
-- Reset and undo
+- Three-way animation diagnostics: UAL source skeleton, Quaternius reference character, and retargeted military soldier
+- Idle, Walk, and Death play directly on the two Quaternius rigs and retarget onto the soldier
+- Independent mesh and skeleton visibility for all three rigs, bone labels, joint XYZ axes, pause, and shared scrub time
+- Bone mapping report with rest-pose quaternion and hierarchy differences; live local Euler snapshots for pelvis, spine, neck, head, arm, and leg joints
+- Soldier's original embedded animation remains available as Celebration Dance
+- Toggleable camera-facing chess symbols, reset, and undo
+
+## Rig and retarget notes
+
+`assets/reference/scene.gltf` and `assets/animations/UAL1_Standard.glb` contain the same 65 joint names and parent hierarchy. The source library provides 195 tracks per clip: rotation, translation, and scale for each joint. The reference character plays those clips directly. The preview loads the three Quaternius clips Idle_Loop, Walk_Loop, and Death01.
+
+The soldier has 70 joints. The 65 Quaternius joints are mapped by anatomical name, including the finger chains, root, and toe ends. The retargeter converts each animated quaternion delta from its source parent rest frame into the soldier's corresponding parent frame, then applies that delta to the soldier's own rest rotation. Translation deltas are transformed between parent frames and scaled to account for the two model sizes; scale tracks preserve the soldier's bind scale. The report calls out inserted finger-base joints and other parent-path differences.
+
+This comparison is intended to help validate retargeting in the browser. The soldier's different rest pose and hierarchy can still produce imperfect motion; inspect Idle, Walk, and Death with the shared scrubber and overlays before treating the retarget as final. No visual validation is claimed by the source-only checks.
 
 ## Limitations
 
-This is a JavaScript/Three.js prototype, not yet Rust/WASM. Characters are procedural articulated placeholders rather than rigged GLB models. Airstrikes, bullet cameras, polished weapon effects, audio, AI, and multiplayer are not yet implemented. Promotion defaults to queen. Special moves trigger board visual synchronization.
+This is a JavaScript/Three.js prototype, not yet Rust/WASM. Battlefield pieces remain procedural. Airstrikes, bullet cameras, polished weapon effects, audio, AI, and multiplayer are not implemented. Promotion defaults to queen. Special moves trigger board visual synchronization.
