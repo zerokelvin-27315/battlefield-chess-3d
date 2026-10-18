@@ -48,16 +48,64 @@ function highlandRock(parent,x,y,z,r,mat){
  m.position.set(x,y,z);m.rotation.set(environmentRandom()*.2,environmentRandom()*6.28,environmentRandom()*.2);
  m.scale.set(1.1,.6+environmentRandom()*.5,1.05);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
 }
+// Procedural slate surface. Textures are deterministic, lightweight and generated locally.
+function slateTexture(seed,light){
+ const canvas=document.createElement('canvas');canvas.width=canvas.height=192;
+ const ctx=canvas.getContext('2d');let state=seed>>>0;
+ const rand=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296};
+ const base=light?118:103;
+ ctx.fillStyle='rgb('+base+','+(base-3)+','+(base-7)+')';ctx.fillRect(0,0,192,192);
+ // Fine-grained stone noise, sediment streaks and irregular mineral patches.
+ for(let i=0;i<2400;i++){
+  const x=rand()*192,y=rand()*192,sz=.5+rand()*3;
+  const v=rand()>.52?255:12,a=.012+rand()*.075;
+  ctx.fillStyle='rgba('+v+','+v+','+v+','+a+')';ctx.fillRect(x,y,sz,sz*(.3+rand()*.8));
+ }
+ for(let i=0;i<18;i++){
+  ctx.beginPath();const x=rand()*192,y=rand()*192;
+  ctx.ellipse(x,y,3+rand()*18,1+rand()*5,rand()*Math.PI,0,Math.PI*2);
+  ctx.fillStyle='rgba(38,35,31,'+(.015+rand()*.05)+')';ctx.fill();
+ }
+ // Hairline fractures and chipped stone grain, kept away from the tile perimeter.
+ for(let i=0;i<5;i++){
+  let x=16+rand()*160,y=16+rand()*160;
+  ctx.beginPath();ctx.moveTo(x,y);
+  for(let j=0;j<4;j++){x=Math.max(5,Math.min(187,x+(rand()-.5)*24));y=Math.max(5,Math.min(187,y+(rand()-.5)*24));ctx.lineTo(x,y)}
+  ctx.strokeStyle='rgba(34,32,30,'+(.13+rand()*.17)+')';ctx.lineWidth=.7+rand()*1.2;ctx.stroke();
+  ctx.strokeStyle='rgba(203,195,177,.12)';ctx.lineWidth=.5;ctx.translate(1,1);ctx.stroke();ctx.translate(-1,-1);
+ }
+ // Dark chipped borders imply uneven grout without changing the logical grid.
+ for(let edge=0;edge<4;edge++){
+  ctx.beginPath();
+  for(let i=0;i<=24;i++){
+   const t=i*8,rough=2+rand()*3;
+   const x=edge===0?t:edge===1?192-rough:edge===2?t:rough;
+   const y=edge===0?rough:edge===1?t:edge===2?192-rough:t;
+   if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  ctx.strokeStyle='rgba(30,29,28,.36)';ctx.lineWidth=2;ctx.stroke();
+ }
+ const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
+ texture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());return texture;
+}
+const slateMaterials=[];
+for(let i=0;i<12;i++){
+ const tex=slateTexture(4919+i*7919,i%2===0);
+ slateMaterials.push(new THREE.MeshStandardMaterial({map:tex,roughness:.95,metalness:0,bumpMap:tex,bumpScale:.008}));
+}
+const groutMaterial=material('#494943');
 // Preserve exact original chess square centers, clickable surfaces, and piece height.
 const highlandsFoundation=box(8.15,.55,8.15,highlandMaterials.stoneDark);
 highlandsFoundation.position.y=-.315;highlandsFoundation.receiveShadow=true;highlandsTerrain.add(highlandsFoundation);
 for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  const x=file-3.5,z=3.5-rank;
  const base=(file+rank)%2?highlandMaterials.stone:highlandMaterials.stoneLight;
- const top=box(.998,.08,.998,base.clone());top.position.set(x,0,z);
+ const top=box(.998,.08,.998,groutMaterial);top.position.set(x,0,z);
  // Subtle tonal variation preserves chess parity without looking like painted tiles.
- const tint=(environmentRandom()-.5)*.095;top.material.color.offsetHSL(0,0,tint);
- top.material.color.lerp(new THREE.Color('#817d71'),.48);
+ const tint=(environmentRandom()-.5)*.095;
+ const slate=new THREE.Mesh(new THREE.PlaneGeometry(.963,.963),slateMaterials[((rank*8+file)*5+(file+rank)%2)%slateMaterials.length]);
+ slate.rotation.x=-Math.PI/2;slate.position.set(x,.041,z);slate.rotation.z=(environmentRandom()-.5)*.014;
+ slate.material.color.offsetHSL(0,0,0);slate.receiveShadow=true;highlandsTerrain.add(slate);
  top.receiveShadow=true;top.userData.square=String.fromCharCode(97+file)+(rank+1);
  highlandsTerrain.add(top);highlandTiles.push(top);
  // Small embedded pebbles stay near edges so pieces and selection remain clear.
@@ -74,12 +122,12 @@ for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  if(environmentRandom()<.23)continue;
  const x=file-3.5,z=3.5-rank;
  const startX=x+(environmentRandom()-.5)*.7,startZ=z+(environmentRandom()-.5)*.7;
- const points=[new THREE.Vector3(startX,.043,startZ)];
+ const points=[new THREE.Vector3(startX,.045,startZ)];
  let cx=startX,cz=startZ;
  for(let j=0;j<3;j++){
   cx=Math.max(x-.47,Math.min(x+.47,cx+(environmentRandom()-.5)*.24));
   cz=Math.max(z-.47,Math.min(z+.47,cz+(environmentRandom()-.5)*.24));
-  points.push(new THREE.Vector3(cx,.043,cz));
+  points.push(new THREE.Vector3(cx,.045,cz));
  }
  highlandsTerrain.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),seamMaterial));
 }
@@ -95,7 +143,7 @@ for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  for(let k=0;k<7;k++){const theta=k/7*Math.PI*2,r=radius*(.65+environmentRandom()*.35);const vx=Math.cos(theta)*r,vz=Math.sin(theta)*r;if(k===0)shape.moveTo(vx,vz);else shape.lineTo(vx,vz)}
  shape.closePath();
  const mesh=new THREE.Mesh(new THREE.ShapeGeometry(shape),patches[Math.floor(environmentRandom()*patches.length)]);
- mesh.rotation.x=-Math.PI/2;mesh.position.set(px,.042,pz);mesh.receiveShadow=true;highlandsTerrain.add(mesh);
+ mesh.rotation.x=-Math.PI/2;mesh.position.set(px,.046,pz);mesh.receiveShadow=true;highlandsTerrain.add(mesh);
 }
 // Irregular connected cliff wall. No free-floating rocks: every stone is anchored into the plateau.
 for(let side=0;side<4;side++)for(let i=0;i<24;i++){
