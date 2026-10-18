@@ -65,6 +65,21 @@ for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
   pebble.castShadow=false;
  }
 }
+// Thin fractured seams suggest natural rock strata without raising walkable surfaces.
+const seamMaterial=new THREE.LineBasicMaterial({color:'#514f4b',transparent:true,opacity:.28,depthWrite:false});
+for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
+ if(environmentRandom()<.23)continue;
+ const x=file-3.5,z=3.5-rank;
+ const startX=x+(environmentRandom()-.5)*.7,startZ=z+(environmentRandom()-.5)*.7;
+ const points=[new THREE.Vector3(startX,.043,startZ)];
+ let cx=startX,cz=startZ;
+ for(let j=0;j<3;j++){
+  cx=Math.max(x-.47,Math.min(x+.47,cx+(environmentRandom()-.5)*.24));
+  cz=Math.max(z-.47,Math.min(z+.47,cz+(environmentRandom()-.5)*.24));
+  points.push(new THREE.Vector3(cx,.043,cz));
+ }
+ highlandsTerrain.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),seamMaterial));
+}
 // Irregular connected cliff wall. No free-floating rocks: every stone is anchored into the plateau.
 for(let side=0;side<4;side++)for(let i=0;i<24;i++){
  const along=-4.1+i*8.2/23+(environmentRandom()-.5)*.22;
