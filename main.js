@@ -53,7 +53,7 @@ function slateTexture(seed,light){
  const canvas=document.createElement('canvas');canvas.width=canvas.height=192;
  const ctx=canvas.getContext('2d');let state=seed>>>0;
  const rand=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296};
- const base=light?145:112;
+ const base=light?117:108;
  ctx.fillStyle='rgb('+base+','+(base-3)+','+(base-7)+')';ctx.fillRect(0,0,192,192);
  // Fine-grained stone noise, sediment streaks and irregular mineral patches.
  for(let i=0;i<2400;i++){
@@ -93,17 +93,17 @@ for(let i=0;i<12;i++){
  const tex=slateTexture(4919+i*7919,i%2===0);
  slateMaterials.push(new THREE.MeshStandardMaterial({map:tex,roughness:.9,metalness:0,bumpMap:tex,bumpScale:.023}));
 }
-const groutMaterial=material('#494943');
+const groutMaterial=material('#48443f');
 // Preserve exact original chess square centers, clickable surfaces, and piece height.
 const highlandsFoundation=box(8.15,.55,8.15,highlandMaterials.stoneDark);
 highlandsFoundation.position.y=-.315;highlandsFoundation.receiveShadow=true;highlandsTerrain.add(highlandsFoundation);
 for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  const x=file-3.5,z=3.5-rank;
  const base=(file+rank)%2?highlandMaterials.stone:highlandMaterials.stoneLight;
- const top=box(.998,.08,.998,groutMaterial);top.position.set(x,0,z);
+ const top=box(.997,.08,.997,groutMaterial);top.position.set(x,0,z);
  // Subtle tonal variation preserves chess parity without looking like painted tiles.
  const tint=(environmentRandom()-.5)*.095;
- const slate=new THREE.Mesh(new THREE.PlaneGeometry(.963,.963),slateMaterials[((rank*8+file)*5+(file+rank)%2)%slateMaterials.length]);
+ const slate=new THREE.Mesh(new THREE.PlaneGeometry(.977,.977),slateMaterials[((rank*8+file)*5+(file+rank)%2)%slateMaterials.length]);
  slate.rotation.x=-Math.PI/2;slate.position.set(x,.041,z);slate.rotation.z=(environmentRandom()-.5)*.014;
  slate.material.color.offsetHSL(0,0,0);slate.receiveShadow=true;highlandsTerrain.add(slate);
  top.receiveShadow=true;top.userData.square=String.fromCharCode(97+file)+(rank+1);
@@ -133,12 +133,12 @@ for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
 }
 // Irregular inset stone patches break up the uniform tile appearance while leaving
 // the flat, clickable 8x8 collision surfaces and original piece heights untouched.
-const patches=[highlandMaterials.soil,highlandMaterials.stoneDark,highlandMaterials.stoneLight];
+const patches=[material('#6f6b62'),material('#615f59'),material('#8b8274')];
 for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  const x=file-3.5,z=3.5-rank;
- if(environmentRandom()<.25)continue;
+ if(environmentRandom()<.68)continue;
  const px=x+(environmentRandom()-.5)*.45,pz=z+(environmentRandom()-.5)*.45;
- const radius=.12+environmentRandom()*.17;
+ const radius=.045+environmentRandom()*.095;
  const shape=new THREE.Shape();
  for(let k=0;k<7;k++){const theta=k/7*Math.PI*2,r=radius*(.65+environmentRandom()*.35);const vx=Math.cos(theta)*r,vz=Math.sin(theta)*r;if(k===0)shape.moveTo(vx,vz);else shape.lineTo(vx,vz)}
  shape.closePath();
@@ -177,7 +177,7 @@ for(let i=0;i<30;i++){
  ledge.scale.set(.8+environmentRandom()*.8,.5+environmentRandom()*.9,.8+environmentRandom()*.8);
 }
 // Tiny vegetation clusters sit on the outer shoulder, away from chess pieces.
-for(let i=0;i<35;i++){
+for(let i=0;i<85;i++){
  const side=Math.floor(environmentRandom()*4),along=(environmentRandom()-.5)*7.8;
  const x=side<2?along:(side===2?-4.02:4.02);
  const z=side<2?(side===0?-4.02:4.02):along;
