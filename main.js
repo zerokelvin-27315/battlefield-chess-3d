@@ -308,7 +308,7 @@ function setSkybox(id){
 }
 function setEnvironment(id){
  const chosen=ENVIRONMENTS[id]||ENVIRONMENTS.classic;
- classicTerrain.visible=id==='classic';highlandsTerrain.visible=id==='highlands';horizonGroup.visible=id==='highlands'&&mode==='battle';alpineSurroundings.visible=id==='highlands'&&mode==='battle';
+ classicTerrain.visible=id==='classic';highlandsTerrain.visible=id==='highlands';horizonGroup.visible=id==='highlands';alpineSurroundings.visible=id==='highlands';
  el('environmentSelect').value=id;
  setSkybox(el('skyboxSelect').value);
 }
