@@ -80,6 +80,20 @@ for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  }
  highlandsTerrain.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),seamMaterial));
 }
+// Irregular inset stone patches break up the uniform tile appearance while leaving
+// the flat, clickable 8x8 collision surfaces and original piece heights untouched.
+const patches=[highlandMaterials.soil,highlandMaterials.stoneDark,highlandMaterials.stoneLight];
+for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
+ const x=file-3.5,z=3.5-rank;
+ if(environmentRandom()<.25)continue;
+ const px=x+(environmentRandom()-.5)*.45,pz=z+(environmentRandom()-.5)*.45;
+ const radius=.12+environmentRandom()*.17;
+ const shape=new THREE.Shape();
+ for(let k=0;k<7;k++){const theta=k/7*Math.PI*2,r=radius*(.65+environmentRandom()*.35);const vx=Math.cos(theta)*r,vz=Math.sin(theta)*r;if(k===0)shape.moveTo(vx,vz);else shape.lineTo(vx,vz)}
+ shape.closePath();
+ const mesh=new THREE.Mesh(new THREE.ShapeGeometry(shape),patches[Math.floor(environmentRandom()*patches.length)]);
+ mesh.rotation.x=-Math.PI/2;mesh.position.set(px,.042,pz);mesh.receiveShadow=true;highlandsTerrain.add(mesh);
+}
 // Irregular connected cliff wall. No free-floating rocks: every stone is anchored into the plateau.
 for(let side=0;side<4;side++)for(let i=0;i<24;i++){
  const along=-4.1+i*8.2/23+(environmentRandom()-.5)*.22;
