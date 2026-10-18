@@ -1,4 +1,4 @@
-# Battlefield Chess 3D — Prototype 1 (v0.4.9)
+# Battlefield Chess 3D — Prototype 1 (v0.4.10)
 
 Playable 3D chess with procedural military characters, rocky terrain, a character animation preview studio, and cinematic capture sequences.
 
@@ -21,7 +21,7 @@ Cloudflare Pages: connect this GitHub repository, select branch `main`, framewor
 - Select a piece and legal destination
 - Orbit/zoom camera
 - Animated movement and capture effects, including a tile-by-tile Rook napalm lane and a Knight ground-burst backward flip
-- Preview Dying state follows the selected attacker role for the Rook napalm and Knight grenade deaths
+- Preview Dying state drives the realistic soldier for custom Rook and Knight deaths and follows the selected attacker role for the Rook napalm and Knight grenade deaths
 - Three-way animation diagnostics: UAL source skeleton, Quaternius reference character, and retargeted military soldier
 - Idle, Walk, and Death play directly on the two Quaternius rigs and retarget onto the soldier
 - Independent mesh and skeleton visibility for all three rigs, bone labels, joint XYZ axes, pause, and shared scrub time
