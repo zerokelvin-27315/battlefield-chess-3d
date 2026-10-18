@@ -21,6 +21,94 @@ const terrain=box(12,.5,12,mats.rock);terrain.position.y=-.34;terrain.receiveSha
 const tileMeshes=[];for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){const sq=String.fromCharCode(97+file)+(rank+1),p=squareToWorld(sq);const tile=box(.97,.08,.97,(rank+file)%2?mats.dark:mats.light);tile.position.set(p.x,.0,p.z);tile.receiveShadow=true;tile.userData.square=sq;boardGroup.add(tile);tileMeshes.push(tile)}
 let seed=42;function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}
 for(let i=0;i<170;i++){const x=(rnd()-.5)*11.5,z=(rnd()-.5)*11.5;if(Math.abs(x)<4.2&&Math.abs(z)<4.2)continue;const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(.07+rnd()*.24,0),material(new THREE.Color().setHSL(.1,.07,.23+rnd()*.15)));rock.position.set(x,-.05,z);rock.rotation.set(rnd(),rnd()*6,rnd());rock.castShadow=true;boardGroup.add(rock)}
+// Environment library: all presets share the original 8x8 grid, square centers, and y=.12 piece origin.
+const BOARD_STANDARD=Object.freeze({files:8,ranks:8,squareSize:1,centerY:.12,boardExtent:8});
+const ENVIRONMENTS=Object.freeze({
+ classic:{name:'Classic',sky:'classic'},
+ highlands:{name:'Rocky Highlands',sky:'sunset'}
+});
+const SKYBOXES=Object.freeze({
+ classic:{name:'Classic',top:'#111c25',bottom:'#111c25',fog:'#111c25',sun:'#ffe7c6',intensity:2.5},
+ sunset:{name:'Sunset',top:'#273953',bottom:'#d89b6b',fog:'#9a8177',sun:'#ffbd7b',intensity:2.8},
+ daylight:{name:'Clear Day',top:'#5085b4',bottom:'#b6d2dc',fog:'#a8c1c8',sun:'#fff0cb',intensity:2.5},
+ mist:{name:'Mountain Mist',top:'#657987',bottom:'#b5b7b1',fog:'#a1a9a7',sun:'#e5e7e0',intensity:1.8},
+ moonlight:{name:'Moonlight',top:'#09152c',bottom:'#27394b',fog:'#1e3040',sun:'#a7c4ef',intensity:1.25}
+});
+const classicTerrain=new THREE.Group();classicTerrain.name='Classic board geometry';boardGroup.add(classicTerrain);
+classicTerrain.add(terrain,...tileMeshes);
+for(const obj of [...boardGroup.children])if(obj!==classicTerrain&&obj.isMesh&&obj.geometry?.type==='DodecahedronGeometry')classicTerrain.add(obj);
+const highlandsTerrain=new THREE.Group();highlandsTerrain.name='Rocky Highlands environment';boardGroup.add(highlandsTerrain);
+const highlandMaterials={
+ stone:material('#77766b'),stoneLight:material('#99917c'),stoneDark:material('#54585a'),
+ soil:material('#6e6251'),grass:material('#586449'),water:new THREE.MeshStandardMaterial({color:'#437d94',roughness:.28,metalness:.15})
+};
+let environmentSeed=99173;function environmentRandom(){environmentSeed=(environmentSeed*1664525+1013904223)>>>0;return environmentSeed/4294967296}
+function highlandRock(parent,x,y,z,r,mat){
+ const m=new THREE.Mesh(new THREE.DodecahedronGeometry(r,0),mat);
+ m.position.set(x,y,z);m.rotation.set(environmentRandom()*.5,environmentRandom()*6.28,environmentRandom()*.4);
+ m.scale.set(1.1,.5+environmentRandom()*.55,1.05);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
+}
+// Square tops stay at the original board height; irregular edges and small details create natural terrain.
+const highlandsFoundation=box(8.8,.75,8.8,highlandMaterials.stoneDark);
+highlandsFoundation.position.y=-.48;highlandsFoundation.receiveShadow=true;highlandsTerrain.add(highlandsFoundation);
+for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
+ const x=file-3.5,z=3.5-rank;
+ const top=box(.99,.08,.99,(file+rank)%2?highlandMaterials.stone:highlandMaterials.stoneLight);
+ top.position.set(x,0,z);top.receiveShadow=true;top.userData.square=String.fromCharCode(97+file)+(rank+1);
+ highlandsTerrain.add(top);
+ // Keep the center clear for chess pieces and mouse/touch picking.
+ for(let k=0;k<2;k++){
+  const dx=(environmentRandom()-.5)*.75,dz=(environmentRandom()-.5)*.75;
+  if(Math.abs(dx)<.28&&Math.abs(dz)<.28)continue;
+  const pebble=highlandRock(highlandsTerrain,x+dx,.055,z+dz,.025+environmentRandom()*.045,highlandMaterials.soil);
+  pebble.castShadow=false;
+ }
+}
+for(let i=0;i<190;i++){
+ const x=(environmentRandom()-.5)*13.8,z=(environmentRandom()-.5)*13.8;
+ if(Math.abs(x)<4.15&&Math.abs(z)<4.15)continue;
+ highlandRock(highlandsTerrain,x,-.28-environmentRandom()*.25,z,.15+environmentRandom()*.65,
+ environmentRandom()>.48?highlandMaterials.stoneDark:highlandMaterials.stone);
+}
+for(let i=0;i<42;i++){
+ const x=(environmentRandom()-.5)*9.1,z=(environmentRandom()-.5)*9.1;
+ if(Math.abs(x)<3.95&&Math.abs(z)<3.95)continue;
+ const tuft=new THREE.Mesh(new THREE.ConeGeometry(.07,.19,5),highlandMaterials.grass);
+ tuft.position.set(x,-.05,z);highlandsTerrain.add(tuft);
+}
+for(let i=0;i<24;i++){
+ const x=(environmentRandom()-.5)*8.5,z=(environmentRandom()-.5)*8.5;
+ if(Math.abs(x)<3.9&&Math.abs(z)<3.9)continue;
+ highlandRock(highlandsTerrain,x,-.8-environmentRandom()*.55,z,.35+environmentRandom()*.65,highlandMaterials.stoneDark);
+}
+const skyDome=new THREE.Mesh(new THREE.SphereGeometry(90,24,12),new THREE.ShaderMaterial({
+ side:THREE.BackSide,depthWrite:false,uniforms:{topColor:{value:new THREE.Color()},bottomColor:{value:new THREE.Color()}},
+ vertexShader:'varying vec3 vPosition; void main(){vPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+ fragmentShader:'varying vec3 vPosition;uniform vec3 topColor;uniform vec3 bottomColor;void main(){float t=smoothstep(-.25,.7,normalize(vPosition).y);gl_FragColor=vec4(mix(bottomColor,topColor,t),1.0);}'
+}));scene.add(skyDome);
+function setSkybox(id){
+ const sky=SKYBOXES[id]||SKYBOXES.sunset;
+ skyDome.visible=id!=='classic';
+ skyDome.material.uniforms.topColor.value.set(sky.top);
+ skyDome.material.uniforms.bottomColor.value.set(sky.bottom);
+ scene.background.set(sky.bottom);scene.fog.color.set(sky.fog);
+ sun.color.set(sky.sun);sun.intensity=sky.intensity;
+}
+function setEnvironment(id){
+ const chosen=ENVIRONMENTS[id]||ENVIRONMENTS.classic;
+ classicTerrain.visible=id==='classic';highlandsTerrain.visible=id==='highlands';
+ el('environmentSelect').value=id;
+ setSkybox(el('skyboxSelect').value);
+}
+function initializeEnvironmentUI(){
+ const boardSelect=el('environmentSelect'),skySelect=el('skyboxSelect');
+ for(const [id,preset] of Object.entries(ENVIRONMENTS))boardSelect.add(new Option(preset.name,id));
+ for(const [id,preset] of Object.entries(SKYBOXES))skySelect.add(new Option(preset.name,id));
+ boardSelect.addEventListener('change',()=>{skySelect.value=ENVIRONMENTS[boardSelect.value].sky;setEnvironment(boardSelect.value)});
+ skySelect.addEventListener('change',()=>setSkybox(skySelect.value));
+ boardSelect.value='highlands';skySelect.value='sunset';setEnvironment('highlands');
+}
+initializeEnvironmentUI();
 const previewBase=box(7,.5,5,mats.rock);previewBase.position.set(0,-.35,0);previewBase.receiveShadow=true;previewGroup.add(previewBase);for(let i=0;i<2;i++){const t=box(2.6,.08,3.4,i?mats.dark:mats.light);t.position.set(i?1.5:-1.5,0,0);t.receiveShadow=true;previewGroup.add(t)}
 function limb(parent,w,h,d,mat,x,y,z){const pivot=new THREE.Group();pivot.position.set(x,y,z);const mesh=box(w,h,d,mat);mesh.position.y=-h/2;mesh.castShadow=true;pivot.add(mesh);parent.add(pivot);return pivot}
 function soldier(type,color){
