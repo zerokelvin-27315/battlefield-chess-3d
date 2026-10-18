@@ -54,7 +54,10 @@ highlandsFoundation.position.y=-.315;highlandsFoundation.receiveShadow=true;high
 for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  const x=file-3.5,z=3.5-rank;
  const base=(file+rank)%2?highlandMaterials.stone:highlandMaterials.stoneLight;
- const top=box(.998,.08,.998,base);top.position.set(x,0,z);
+ const top=box(.998,.08,.998,base.clone());top.position.set(x,0,z);
+ // Subtle tonal variation preserves chess parity without looking like painted tiles.
+ const tint=(environmentRandom()-.5)*.095;top.material.color.offsetHSL(0,0,tint);
+ top.material.color.lerp(new THREE.Color('#817d71'),.48);
  top.receiveShadow=true;top.userData.square=String.fromCharCode(97+file)+(rank+1);
  highlandsTerrain.add(top);highlandTiles.push(top);
  // Small embedded pebbles stay near edges so pieces and selection remain clear.
@@ -100,10 +103,10 @@ for(let side=0;side<4;side++)for(let i=0;i<24;i++){
  const out=4.12+(environmentRandom()-.5)*.28;
  const x=side<2?along:(side===2?-out:out);
  const z=side<2?(side===0?-out:out):along;
- const height=.65+environmentRandom()*1.15;
+ const height=.55+Math.pow(environmentRandom(),1.6)*1.65;
  const rock=highlandRock(highlandsTerrain,x,-.5-height*.25,z,.3+environmentRandom()*.3,
  environmentRandom()>.5?highlandMaterials.stoneDark:highlandMaterials.stone);
- rock.scale.y=height/(rock.geometry.boundingSphere?.radius||.6);
+ rock.scale.set(.7+environmentRandom()*.85,height/(rock.geometry.parameters.radius*1.7),.65+environmentRandom()*.9);
 }
 for(let i=0;i<80;i++){
  const x=(environmentRandom()-.5)*9.4,z=(environmentRandom()-.5)*9.4;
@@ -118,15 +121,15 @@ for(let i=0;i<55;i++){
 }
 // Low, layered mountain silhouettes. Heights are kept below the camera sightline.
 const horizonGroup=new THREE.Group();scene.add(horizonGroup);
-const horizonColors=['#777d87','#89909b','#a3a0a0'];
+const horizonColors=['#697684','#89919c','#b0a5a0'];
 for(let layer=0;layer<3;layer++){
  const radius=43+layer*9,segments=96;
  const positions=[],indices=[];
  for(let i=0;i<=segments;i++){
   const angle=i/segments*Math.PI*2;
   const r=radius+Math.sin(angle*9+layer)*2.5;
-  const ridge=-5.6+Math.pow(Math.max(0,Math.sin(angle*(7+layer)+layer*1.7)),3)*(2.3-layer*.42)
-    +Math.sin(angle*19+layer*2)*.33;
+  const ridge=-5.7+Math.pow(Math.max(0,Math.sin(angle*(7+layer)+layer*1.7)),5)*(2.15-layer*.45)
+    +Math.sin(angle*19+layer*2)*.32+Math.sin(angle*41+layer*3)*.17;
   positions.push(Math.sin(angle)*r,-18,Math.cos(angle)*r);
   positions.push(Math.sin(angle)*r,ridge,Math.cos(angle)*r);
   if(i<segments){const j=i*2;indices.push(j,j+1,j+2,j+1,j+3,j+2)}
