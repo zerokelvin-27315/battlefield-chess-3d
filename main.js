@@ -29,7 +29,7 @@ const ENVIRONMENTS=Object.freeze({
 });
 const SKYBOXES=Object.freeze({
  classic:{name:'Classic',top:'#111c25',bottom:'#111c25',fog:'#111c25',sun:'#ffe7c6',intensity:2.5},
- sunset:{name:'Sunset',top:'#273953',bottom:'#d89b6b',fog:'#9a8177',sun:'#ffbd7b',intensity:2.8},
+ sunset:{name:'Sunset',top:'#354b69',bottom:'#a58b81',fog:'#827b7b',sun:'#ffcf9a',intensity:2.4},
  daylight:{name:'Clear Day',top:'#5085b4',bottom:'#b6d2dc',fog:'#a8c1c8',sun:'#fff0cb',intensity:2.5},
  mist:{name:'Mountain Mist',top:'#657987',bottom:'#b5b7b1',fog:'#a1a9a7',sun:'#e5e7e0',intensity:1.8},
  moonlight:{name:'Moonlight',top:'#09152c',bottom:'#27394b',fog:'#1e3040',sun:'#a7c4ef',intensity:1.25}
@@ -39,56 +39,80 @@ classicTerrain.add(terrain,...tileMeshes);
 for(const obj of [...boardGroup.children])if(obj!==classicTerrain&&obj.isMesh&&obj.geometry?.type==='DodecahedronGeometry')classicTerrain.add(obj);
 const highlandTiles=[];const highlandsTerrain=new THREE.Group();highlandsTerrain.name='Rocky Highlands environment';boardGroup.add(highlandsTerrain);
 const highlandMaterials={
- stone:material('#77766b'),stoneLight:material('#99917c'),stoneDark:material('#54585a'),
- soil:material('#6e6251'),grass:material('#586449'),water:new THREE.MeshStandardMaterial({color:'#437d94',roughness:.28,metalness:.15})
+ stone:material('#77736b'),stoneLight:material('#938b7a'),stoneDark:material('#555554'),
+ soil:material('#756b5c'),grass:material('#59654b'),water:new THREE.MeshStandardMaterial({color:'#426b7d',roughness:.42,metalness:.08})
 };
 let environmentSeed=99173;function environmentRandom(){environmentSeed=(environmentSeed*1664525+1013904223)>>>0;return environmentSeed/4294967296}
 function highlandRock(parent,x,y,z,r,mat){
  const m=new THREE.Mesh(new THREE.DodecahedronGeometry(r,0),mat);
- m.position.set(x,y,z);m.rotation.set(environmentRandom()*.5,environmentRandom()*6.28,environmentRandom()*.4);
- m.scale.set(1.1,.5+environmentRandom()*.55,1.05);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
+ m.position.set(x,y,z);m.rotation.set(environmentRandom()*.2,environmentRandom()*6.28,environmentRandom()*.2);
+ m.scale.set(1.1,.6+environmentRandom()*.5,1.05);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
 }
-// Square tops stay at the original board height; irregular edges and small details create natural terrain.
-const highlandsFoundation=box(8.8,.75,8.8,highlandMaterials.stoneDark);
-highlandsFoundation.position.y=-.48;highlandsFoundation.receiveShadow=true;highlandsTerrain.add(highlandsFoundation);
+// Preserve exact original chess square centers, clickable surfaces, and piece height.
+const highlandsFoundation=box(8.15,.55,8.15,highlandMaterials.stoneDark);
+highlandsFoundation.position.y=-.315;highlandsFoundation.receiveShadow=true;highlandsTerrain.add(highlandsFoundation);
 for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  const x=file-3.5,z=3.5-rank;
- const top=box(.99,.08,.99,(file+rank)%2?highlandMaterials.stone:highlandMaterials.stoneLight);
- top.position.set(x,0,z);top.receiveShadow=true;top.userData.square=String.fromCharCode(97+file)+(rank+1);
+ const base=(file+rank)%2?highlandMaterials.stone:highlandMaterials.stoneLight;
+ const top=box(.998,.08,.998,base);top.position.set(x,0,z);
+ top.receiveShadow=true;top.userData.square=String.fromCharCode(97+file)+(rank+1);
  highlandsTerrain.add(top);highlandTiles.push(top);
- // Keep the center clear for chess pieces and mouse/touch picking.
- for(let k=0;k<2;k++){
-  const dx=(environmentRandom()-.5)*.75,dz=(environmentRandom()-.5)*.75;
-  if(Math.abs(dx)<.28&&Math.abs(dz)<.28)continue;
-  const pebble=highlandRock(highlandsTerrain,x+dx,.055,z+dz,.025+environmentRandom()*.045,highlandMaterials.soil);
+ // Small embedded pebbles stay near edges so pieces and selection remain clear.
+ if(environmentRandom()>.45){
+  const dx=(environmentRandom()>.5?1:-1)*(.35+environmentRandom()*.07);
+  const dz=(environmentRandom()>.5?1:-1)*(.34+environmentRandom()*.07);
+  const pebble=highlandRock(highlandsTerrain,x+dx,.045,z+dz,.018+environmentRandom()*.025,highlandMaterials.soil);
   pebble.castShadow=false;
  }
 }
-for(let i=0;i<190;i++){
- const x=(environmentRandom()-.5)*13.8,z=(environmentRandom()-.5)*13.8;
- if(Math.abs(x)<4.15&&Math.abs(z)<4.15)continue;
- highlandRock(highlandsTerrain,x,-.28-environmentRandom()*.25,z,.15+environmentRandom()*.65,
- environmentRandom()>.48?highlandMaterials.stoneDark:highlandMaterials.stone);
+// Irregular connected cliff wall. No free-floating rocks: every stone is anchored into the plateau.
+for(let side=0;side<4;side++)for(let i=0;i<24;i++){
+ const along=-4.1+i*8.2/23+(environmentRandom()-.5)*.22;
+ const out=4.12+(environmentRandom()-.5)*.28;
+ const x=side<2?along:(side===2?-out:out);
+ const z=side<2?(side===0?-out:out):along;
+ const height=.65+environmentRandom()*1.15;
+ const rock=highlandRock(highlandsTerrain,x,-.5-height*.25,z,.3+environmentRandom()*.3,
+ environmentRandom()>.5?highlandMaterials.stoneDark:highlandMaterials.stone);
+ rock.scale.y=height/(rock.geometry.boundingSphere?.radius||.6);
 }
-for(let i=0;i<42;i++){
- const x=(environmentRandom()-.5)*9.1,z=(environmentRandom()-.5)*9.1;
- if(Math.abs(x)<3.95&&Math.abs(z)<3.95)continue;
- const tuft=new THREE.Mesh(new THREE.ConeGeometry(.07,.19,5),highlandMaterials.grass);
- tuft.position.set(x,-.05,z);highlandsTerrain.add(tuft);
+for(let i=0;i<80;i++){
+ const x=(environmentRandom()-.5)*9.4,z=(environmentRandom()-.5)*9.4;
+ if(Math.abs(x)<4.02&&Math.abs(z)<4.02)continue;
+ highlandRock(highlandsTerrain,x,-.65,z,.14+environmentRandom()*.3,highlandMaterials.stoneDark);
 }
-for(let i=0;i<24;i++){
+for(let i=0;i<55;i++){
  const x=(environmentRandom()-.5)*8.5,z=(environmentRandom()-.5)*8.5;
- if(Math.abs(x)<3.9&&Math.abs(z)<3.9)continue;
- highlandRock(highlandsTerrain,x,-.8-environmentRandom()*.55,z,.35+environmentRandom()*.65,highlandMaterials.stoneDark);
+ if(Math.abs(x)<3.95&&Math.abs(z)<3.95)continue;
+ const tuft=new THREE.Mesh(new THREE.ConeGeometry(.045,.12,5),highlandMaterials.grass);
+ tuft.position.set(x,-.07,z);highlandsTerrain.add(tuft);
+}
+// Distant connected ridgelines give the sky a horizon instead of an empty colored void.
+const horizonGroup=new THREE.Group();scene.add(horizonGroup);
+const ridgeMats=[material('#59616b'),material('#72737a'),material('#8b8280')];
+for(let layer=0;layer<3;layer++){
+ const radius=37+layer*13,peaks=32;
+ const positions=[],indices=[];
+ for(let i=0;i<=peaks;i++){
+  const angle=i/peaks*Math.PI*2;
+  const r=radius+(environmentRandom()-.5)*6;
+  const height=-2+environmentRandom()*(7-layer*1.1);
+  positions.push(Math.sin(angle)*r,-10,Math.cos(angle)*r);
+  positions.push(Math.sin(angle)*r,height,Math.cos(angle)*r);
+  if(i<peaks){const j=i*2;indices.push(j,j+1,j+2,j+1,j+3,j+2)}
+ }
+ const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setIndex(indices);geo.computeVertexNormals();
+ const mesh=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:ridgeMats[layer].color,side:THREE.DoubleSide,fog:false}));
+ horizonGroup.add(mesh);
 }
 const skyDome=new THREE.Mesh(new THREE.SphereGeometry(90,24,12),new THREE.ShaderMaterial({
  side:THREE.BackSide,depthWrite:false,uniforms:{topColor:{value:new THREE.Color()},bottomColor:{value:new THREE.Color()}},
  vertexShader:'varying vec3 vPosition; void main(){vPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
- fragmentShader:'varying vec3 vPosition;uniform vec3 topColor;uniform vec3 bottomColor;void main(){float t=smoothstep(-.25,.7,normalize(vPosition).y);gl_FragColor=vec4(mix(bottomColor,topColor,t),1.0);}'
+ fragmentShader:'varying vec3 vPosition;uniform vec3 topColor;uniform vec3 bottomColor;void main(){float t=smoothstep(-.55,.32,normalize(vPosition).y);gl_FragColor=vec4(mix(bottomColor,topColor,t),1.0);}'
 }));scene.add(skyDome);
 function setSkybox(id){
  const sky=SKYBOXES[id]||SKYBOXES.sunset;
- skyDome.visible=id!=='classic';
+ skyDome.visible=id!=='classic';horizonGroup.visible=id!=='classic'&&highlandsTerrain.visible;
  skyDome.material.uniforms.topColor.value.set(sky.top);
  skyDome.material.uniforms.bottomColor.value.set(sky.bottom);
  scene.background.set(sky.bottom);scene.fog.color.set(sky.fog);
@@ -96,7 +120,7 @@ function setSkybox(id){
 }
 function setEnvironment(id){
  const chosen=ENVIRONMENTS[id]||ENVIRONMENTS.classic;
- classicTerrain.visible=id==='classic';highlandsTerrain.visible=id==='highlands';
+ classicTerrain.visible=id==='classic';highlandsTerrain.visible=id==='highlands';horizonGroup.visible=id==='highlands';
  el('environmentSelect').value=id;
  setSkybox(el('skyboxSelect').value);
 }
