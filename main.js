@@ -204,28 +204,35 @@ function pineTree(x,y,z,height){
  alpineSurroundings.add(root);
 }
 function valleyHeight(x,z){
- const dist=Math.max(Math.abs(x),Math.abs(z));
- const waves=Math.sin(x*.24)*1.65+Math.cos(z*.21)*1.4+Math.sin((x+z)*.13)*1.9;
- const cliffRise=Math.max(0,dist-7)*.065;
- return -3.6+waves+cliffRise;
+ const d=Math.hypot(x,z);
+ const ridge=Math.pow(Math.max(0,Math.sin(x*.115+z*.075)),3)*Math.max(0,d-14)*.15;
+ const peaks=Math.sin(x*.21)*.65+Math.cos(z*.19)*.8+Math.sin((x+z)*.11)*.55;
+ // Lower the land around the battlefield to expose distant peaks and valley.
+ const valley=-7.8+peaks+ridge;
+ const near=Math.max(0,1-Math.max(0,d-6)/7);
+ return valley-near*.6;
 }
-// Sloped stone shoulders visually join the plateau cliffs to the valley terrain.
-const shoulderMaterial=new THREE.MeshStandardMaterial({color:'#746e63',roughness:1,side:THREE.DoubleSide});
+// Narrow, broken cliff transition rather than a giant smooth rectangular pedestal.
+const shoulderMaterial=new THREE.MeshStandardMaterial({color:'#69665f',roughness:1,flatShading:true,side:THREE.DoubleSide});
+const cliffBands=[0,-.4,-1.15,-2.25,-3.6];
 for(let side=0;side<4;side++){
- const verts=[],idx=[],steps=24;
+ const verts=[],idx=[],steps=32;
  for(let j=0;j<=steps;j++){
-  const t=j/steps,along=-4.3+t*8.6;
-  for(let k=0;k<3;k++){
-   const d=k===0?4.08:k===1?5.15:6.6;
+  const t=j/steps,along=-4.22+t*8.44;
+  for(let k=0;k<cliffBands.length;k++){
+   const d=[4.03,4.27,4.65,5.15,5.85][k]+Math.sin(t*27+side*5+k*1.9)*(.035+k*.085);
    const x=side<2?along:(side===2?-d:d);
    const z=side<2?(side===0?-d:d):along;
-   const y=k===0?-.55:k===1?-1.75:valleyHeight(x,z);
-   verts.push(x,y+(environmentRandom()-.5)*.09,z);
+   const y=cliffBands[k]+Math.sin(t*17+side*2+k)*(.04+k*.12);
+   verts.push(x,y,z);
   }
-  if(j<steps){const a=j*3;for(let k=0;k<2;k++){idx.push(a+k,a+k+3,a+k+1,a+k+1,a+k+3,a+k+4)}}
+  if(j<steps){const a=j*cliffBands.length;for(let k=0;k<cliffBands.length-1;k++){
+   if((j+k)%2)idx.push(a+k,a+k+cliffBands.length,a+k+1,a+k+1,a+k+cliffBands.length,a+k+cliffBands.length+1);
+   else idx.push(a+k,a+k+cliffBands.length,a+k+cliffBands.length+1,a+k,a+k+cliffBands.length+1,a+k+1);
+  }}
  }
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));g.setIndex(idx);g.computeVertexNormals();
- const shoulder=new THREE.Mesh(g,shoulderMaterial);shoulder.receiveShadow=true;alpineSurroundings.add(shoulder);
+ const cliff=new THREE.Mesh(g,shoulderMaterial);cliff.receiveShadow=true;alpineSurroundings.add(cliff);
 }
 // Terrain has a central opening: scenery never overlaps the chessboard.
 const valleyPositions=[],valleyIndices=[],valleyN=70,valleySpan=100;
@@ -236,17 +243,17 @@ for(let iz=0;iz<=valleyN;iz++)for(let ix=0;ix<=valleyN;ix++){
 }
 for(let iz=0;iz<valleyN;iz++)for(let ix=0;ix<valleyN;ix++){
  const cx=(ix+.5)/valleyN*valleySpan-valleySpan/2,cz=(iz+.5)/valleyN*valleySpan-valleySpan/2;
- if(Math.abs(cx)<6.4&&Math.abs(cz)<6.4)continue;
+ if(Math.abs(cx)<6.5&&Math.abs(cz)<6.5)continue;
  const a=iz*(valleyN+1)+ix,b=a+1,c=a+valleyN+1,d=c+1;
  valleyIndices.push(a,c,b,b,c,d);
 }
 const valleyGeo=new THREE.BufferGeometry();valleyGeo.setAttribute('position',new THREE.Float32BufferAttribute(valleyPositions,3));valleyGeo.setIndex(valleyIndices);valleyGeo.computeVertexNormals();
 const valleyGround=new THREE.Mesh(valleyGeo,new THREE.MeshStandardMaterial({color:'#66715f',roughness:1,side:THREE.DoubleSide}));
 valleyGround.receiveShadow=true;alpineSurroundings.add(valleyGround);
-for(let i=0;i<260;i++){
+for(let i=0;i<470;i++){
  const x=(environmentRandom()-.5)*82,z=(environmentRandom()-.5)*82;
- if(Math.abs(x)<7&&Math.abs(z)<7)continue;
- const y=valleyHeight(x,z),size=.35+environmentRandom()*1.2;
+ if(Math.abs(x)<9&&Math.abs(z)<9)continue;
+ const y=valleyHeight(x,z),size=.25+environmentRandom()*.68;
  if(environmentRandom()<.74)pineTree(x,y,z,size);
  else{
   const rock=highlandRock(alpineSurroundings,x,y-.15,z,.35+environmentRandom()*1.3,
@@ -272,9 +279,9 @@ function mountainMass(cx,cz,radius,height,mat){
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));g.setIndex(faces);g.computeVertexNormals();
  const mesh=new THREE.Mesh(g,mat);mesh.receiveShadow=true;alpineSurroundings.add(mesh);
 }
-mountainMass(-25,-23,16,15,massifMats[1]);
-mountainMass(-41,-12,19,21,massifMats[0]);
-mountainMass(27,-29,17,14,massifMats[2]);
+mountainMass(-25,-23,16,18,massifMats[1]);
+mountainMass(-41,-12,19,25,massifMats[0]);
+mountainMass(27,-29,17,19,massifMats[2]);
 mountainMass(38,14,16,18,massifMats[1]);
 // Rock strata on the plateau face, using a shared material and no gameplay collision.
 const strataMat=new THREE.LineBasicMaterial({color:'#b2a18c',transparent:true,opacity:.24});
@@ -294,19 +301,19 @@ riverShape.bezierCurveTo(-4,13,13,26,8,48);
 riverShape.lineTo(11,48);riverShape.bezierCurveTo(16,26,-1,13,-6,1);
 riverShape.bezierCurveTo(-11,-10,8,-28,1,-48);riverShape.closePath();
 const river=new THREE.Mesh(new THREE.ShapeGeometry(riverShape),valleyMats.lake);
-river.rotation.x=-Math.PI/2;river.position.y=-3.8;river.receiveShadow=false;alpineSurroundings.add(river);
+river.rotation.x=-Math.PI/2;river.position.y=-8.1;river.receiveShadow=false;alpineSurroundings.add(river);
 // Soft atmospheric strips add depth at low cost on mobile.
 for(let i=0;i<5;i++){
  const mist=new THREE.Mesh(new THREE.PlaneGeometry(35,4),valleyMats.mist);
- mist.rotation.x=-Math.PI/2;mist.position.set((i-2)*11,-2.6+i*.12,20+i*6);
+ mist.rotation.x=-Math.PI/2;mist.position.set((i-2)*11,-6.8+i*.12,20+i*6);
  alpineSurroundings.add(mist);
 }
 // Border pines and plants establish a connection between plateau and wider landscape.
-for(let i=0;i<44;i++){
+for(let i=0;i<65;i++){
  const side=Math.floor(environmentRandom()*4),along=(environmentRandom()-.5)*10;
- const x=side<2?along:(side===2?-6:6);
- const z=side<2?(side===0?-6:6):along;
- pineTree(x,valleyHeight(x,z),z,.35+environmentRandom()*.65);
+ const x=side<2?along:(side===2?-8.3:8.3);
+ const z=side<2?(side===0?-8.3:8.3):along;
+ pineTree(x,valleyHeight(x,z),z,.23+environmentRandom()*.48);
 }
 // Low, layered mountain silhouettes. Heights are kept below the camera sightline.
 const horizonGroup=new THREE.Group();scene.add(horizonGroup);
