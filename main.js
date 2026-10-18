@@ -254,6 +254,39 @@ for(let i=0;i<260;i++){
   rock.castShadow=false;
  }
 }
+// Composed mountain masses: steep ridges frame the valley rather than uniform hills.
+const massifMats=[material('#777977'),material('#5b6368'),material('#8a807a')];
+function mountainMass(cx,cz,radius,height,mat){
+ const rings=5,segments=11,vertices=[],faces=[];
+ for(let ring=0;ring<=rings;ring++){
+  const t=ring/rings,r=radius*(1-t),y=valleyHeight(cx,cz)+height*(t*t*(3-2*t));
+  for(let j=0;j<segments;j++){
+   const a=j/segments*Math.PI*2,variation=1+.17*Math.sin(j*3.7+cx)+.1*Math.cos(j*6.1+cz);
+   vertices.push(cx+Math.cos(a)*r*variation,y+Math.sin(a*3+cz)*.35*(1-t),cz+Math.sin(a)*r*variation);
+  }
+ }
+ for(let ring=0;ring<rings;ring++)for(let j=0;j<segments;j++){
+  const a=ring*segments+j,b=ring*segments+(j+1)%segments,c=a+segments,d=b+segments;
+  faces.push(a,b,c,b,d,c);
+ }
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));g.setIndex(faces);g.computeVertexNormals();
+ const mesh=new THREE.Mesh(g,mat);mesh.receiveShadow=true;alpineSurroundings.add(mesh);
+}
+mountainMass(-25,-23,16,15,massifMats[1]);
+mountainMass(-41,-12,19,21,massifMats[0]);
+mountainMass(27,-29,17,14,massifMats[2]);
+mountainMass(38,14,16,18,massifMats[1]);
+// Rock strata on the plateau face, using a shared material and no gameplay collision.
+const strataMat=new THREE.LineBasicMaterial({color:'#b2a18c',transparent:true,opacity:.24});
+for(let side=0;side<4;side++)for(let level=0;level<3;level++){
+ const pts=[];
+ for(let i=0;i<=18;i++){
+  const t=i/18,along=-4.05+t*8.1;
+  const d=4.15+.08*Math.sin(t*22+level);
+  pts.push(new THREE.Vector3(side<2?along:side===2?-d:d,-.5-level*.24+.06*Math.sin(t*16+side),side<2?(side===0?-d:d):along));
+ }
+ highlandsTerrain.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),strataMat));
+}
 // River valley with warm reflected sky, well below the board.
 const riverShape=new THREE.Shape();
 riverShape.moveTo(-2,-48);riverShape.bezierCurveTo(5,-28,-14,-10,-9,1);
