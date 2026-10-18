@@ -119,6 +119,23 @@ for(let i=0;i<55;i++){
  const tuft=new THREE.Mesh(new THREE.ConeGeometry(.045,.12,5),highlandMaterials.grass);
  tuft.position.set(x,-.07,z);highlandsTerrain.add(tuft);
 }
+// Scattered ledges beneath the cliff lip break the repetitive hanging-rock outline.
+for(let i=0;i<30;i++){
+ const side=Math.floor(environmentRandom()*4),along=(environmentRandom()-.5)*7.8;
+ const x=side<2?along:(side===2?-4.15:4.15);
+ const z=side<2?(side===0?-4.15:4.15):along;
+ const ledge=highlandRock(highlandsTerrain,x,-.8-environmentRandom()*.65,z,.24+environmentRandom()*.35,
+ environmentRandom()>.5?highlandMaterials.stone:highlandMaterials.stoneDark);
+ ledge.scale.set(.8+environmentRandom()*.8,.5+environmentRandom()*.9,.8+environmentRandom()*.8);
+}
+// Tiny vegetation clusters sit on the outer shoulder, away from chess pieces.
+for(let i=0;i<35;i++){
+ const side=Math.floor(environmentRandom()*4),along=(environmentRandom()-.5)*7.8;
+ const x=side<2?along:(side===2?-4.02:4.02);
+ const z=side<2?(side===0?-4.02:4.02):along;
+ const grass=new THREE.Mesh(new THREE.ConeGeometry(.055,.15+environmentRandom()*.12,5),highlandMaterials.grass);
+ grass.position.set(x,.065,z);grass.castShadow=false;highlandsTerrain.add(grass);
+}
 // Low, layered mountain silhouettes. Heights are kept below the camera sightline.
 const horizonGroup=new THREE.Group();scene.add(horizonGroup);
 const horizonColors=['#697684','#89919c','#b0a5a0'];
