@@ -29,7 +29,7 @@ const ENVIRONMENTS=Object.freeze({
 });
 const SKYBOXES=Object.freeze({
  classic:{name:'Classic',top:'#111c25',bottom:'#111c25',fog:'#111c25',sun:'#ffe7c6',intensity:2.5},
- sunset:{name:'Sunset',top:'#354b69',bottom:'#a58b81',fog:'#827b7b',sun:'#ffcf9a',intensity:2.4},
+ sunset:{name:'Sunset',top:'#435e7d',bottom:'#c1a394',fog:'#a69a96',sun:'#ffcf9a',intensity:2.4},
  daylight:{name:'Clear Day',top:'#5085b4',bottom:'#b6d2dc',fog:'#a8c1c8',sun:'#fff0cb',intensity:2.5},
  mist:{name:'Mountain Mist',top:'#657987',bottom:'#b5b7b1',fog:'#a1a9a7',sun:'#e5e7e0',intensity:1.8},
  moonlight:{name:'Moonlight',top:'#09152c',bottom:'#27394b',fog:'#1e3040',sun:'#a7c4ef',intensity:1.25}
@@ -102,28 +102,28 @@ for(let i=0;i<55;i++){
  const tuft=new THREE.Mesh(new THREE.ConeGeometry(.045,.12,5),highlandMaterials.grass);
  tuft.position.set(x,-.07,z);highlandsTerrain.add(tuft);
 }
-// Distant connected ridgelines give the sky a horizon instead of an empty colored void.
+// Low, layered mountain silhouettes. Heights are kept below the camera sightline.
 const horizonGroup=new THREE.Group();scene.add(horizonGroup);
-const ridgeMats=[material('#59616b'),material('#72737a'),material('#8b8280')];
+const horizonColors=['#777d87','#89909b','#a3a0a0'];
 for(let layer=0;layer<3;layer++){
- const radius=37+layer*13,peaks=32;
+ const radius=43+layer*9,segments=96;
  const positions=[],indices=[];
- for(let i=0;i<=peaks;i++){
-  const angle=i/peaks*Math.PI*2;
-  const r=radius+(environmentRandom()-.5)*6;
-  const height=-2+environmentRandom()*(7-layer*1.1);
-  positions.push(Math.sin(angle)*r,-10,Math.cos(angle)*r);
-  positions.push(Math.sin(angle)*r,height,Math.cos(angle)*r);
-  if(i<peaks){const j=i*2;indices.push(j,j+1,j+2,j+1,j+3,j+2)}
+ for(let i=0;i<=segments;i++){
+  const angle=i/segments*Math.PI*2;
+  const r=radius+Math.sin(angle*9+layer)*2.5;
+  const ridge=-5.6+Math.pow(Math.max(0,Math.sin(angle*(7+layer)+layer*1.7)),3)*(2.3-layer*.42)
+    +Math.sin(angle*19+layer*2)*.33;
+  positions.push(Math.sin(angle)*r,-18,Math.cos(angle)*r);
+  positions.push(Math.sin(angle)*r,ridge,Math.cos(angle)*r);
+  if(i<segments){const j=i*2;indices.push(j,j+1,j+2,j+1,j+3,j+2)}
  }
  const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setIndex(indices);geo.computeVertexNormals();
- const mesh=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:ridgeMats[layer].color,side:THREE.DoubleSide,fog:false}));
- horizonGroup.add(mesh);
+ horizonGroup.add(new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:horizonColors[layer],side:THREE.DoubleSide,depthWrite:true,fog:false})));
 }
 const skyDome=new THREE.Mesh(new THREE.SphereGeometry(90,24,12),new THREE.ShaderMaterial({
  side:THREE.BackSide,depthWrite:false,uniforms:{topColor:{value:new THREE.Color()},bottomColor:{value:new THREE.Color()}},
  vertexShader:'varying vec3 vPosition; void main(){vPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
- fragmentShader:'varying vec3 vPosition;uniform vec3 topColor;uniform vec3 bottomColor;void main(){float t=smoothstep(-.55,.32,normalize(vPosition).y);gl_FragColor=vec4(mix(bottomColor,topColor,t),1.0);}'
+ fragmentShader:'varying vec3 vPosition;uniform vec3 topColor;uniform vec3 bottomColor;void main(){float t=smoothstep(-.28,.48,normalize(vPosition).y);gl_FragColor=vec4(mix(bottomColor,topColor,t),1.0);}'
 }));scene.add(skyDome);
 function setSkybox(id){
  const sky=SKYBOXES[id]||SKYBOXES.sunset;
