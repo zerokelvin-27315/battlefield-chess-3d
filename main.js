@@ -37,7 +37,7 @@ const SKYBOXES=Object.freeze({
 const classicTerrain=new THREE.Group();classicTerrain.name='Classic board geometry';boardGroup.add(classicTerrain);
 classicTerrain.add(terrain,...tileMeshes);
 for(const obj of [...boardGroup.children])if(obj!==classicTerrain&&obj.isMesh&&obj.geometry?.type==='DodecahedronGeometry')classicTerrain.add(obj);
-const highlandsTerrain=new THREE.Group();highlandsTerrain.name='Rocky Highlands environment';boardGroup.add(highlandsTerrain);
+const highlandTiles=[];const highlandsTerrain=new THREE.Group();highlandsTerrain.name='Rocky Highlands environment';boardGroup.add(highlandsTerrain);
 const highlandMaterials={
  stone:material('#77766b'),stoneLight:material('#99917c'),stoneDark:material('#54585a'),
  soil:material('#6e6251'),grass:material('#586449'),water:new THREE.MeshStandardMaterial({color:'#437d94',roughness:.28,metalness:.15})
@@ -55,7 +55,7 @@ for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  const x=file-3.5,z=3.5-rank;
  const top=box(.99,.08,.99,(file+rank)%2?highlandMaterials.stone:highlandMaterials.stoneLight);
  top.position.set(x,0,z);top.receiveShadow=true;top.userData.square=String.fromCharCode(97+file)+(rank+1);
- highlandsTerrain.add(top);
+ highlandsTerrain.add(top);highlandTiles.push(top);
  // Keep the center clear for chess pieces and mouse/touch picking.
  for(let k=0;k<2;k++){
   const dx=(environmentRandom()-.5)*.75,dz=(environmentRandom()-.5)*.75;
@@ -148,7 +148,7 @@ function setState(actor,state){if(!actor)return;actor.userData.state=state;actor
 function syncBoard(){for(const a of actors.values())boardGroup.remove(a);actors.clear();for(let r=0;r<8;r++)for(let f=0;f<8;f++){const sq=String.fromCharCode(97+f)+(r+1),piece=game.get(sq);if(!piece)continue;const a=soldier(piece.type,piece.color),p=squareToWorld(sq);a.position.set(p.x,.12,p.z);a.rotation.y=piece.color==='w'?Math.PI:0;boardGroup.add(a);actors.set(sq,a)}updateTurn()}
 function updateTurn(){const turn=game.turn()==='w'?'White':'Black';el('turn').textContent=game.isCheckmate()?`Checkmate! ${turn==='White'?'Black':'White'} wins`:game.isDraw()?'Draw':`${turn} to move${game.isCheck()?' • CHECK':''}`}
 function chooseSquare(sq){if(busy||mode!=='battle'||game.isGameOver())return;const piece=game.get(sq);if(selected&&legal.includes(sq)){performMove(selected,sq);return}clearHighlights();for(const a of actors.values())setState(a,'idle');if(piece&&piece.color===game.turn()){selected=sq;legal=game.moves({square:sq,verbose:true}).map(m=>m.to);mark(sq,0x4fb3dc);legal.forEach(s=>mark(s,game.get(s)?0xff684f:0x58cc98));setState(actors.get(sq),'highlighted');status(`${TYPES[piece.type]} selected • ${legal.length} legal moves`)}else{selected=null;legal=[];status('Select a friendly piece')}}
-const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointerStart=null;renderer.domElement.addEventListener('pointerdown',e=>pointerStart={x:e.clientX,y:e.clientY});renderer.domElement.addEventListener('pointerup',e=>{if(!pointerStart||Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>7)return;pointerStart=null;if(mode!=='battle')return;mouse.set(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1);raycaster.setFromCamera(mouse,camera);const hits=raycaster.intersectObjects(tileMeshes);if(hits.length)chooseSquare(hits[0].object.userData.square)});
+const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointerStart=null;renderer.domElement.addEventListener('pointerdown',e=>pointerStart={x:e.clientX,y:e.clientY});renderer.domElement.addEventListener('pointerup',e=>{if(!pointerStart||Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>7)return;pointerStart=null;if(mode!=='battle')return;mouse.set(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1);raycaster.setFromCamera(mouse,camera);const hits=raycaster.intersectObjects(el('environmentSelect').value==='highlands'?highlandTiles:tileMeshes);if(hits.length)chooseSquare(hits[0].object.userData.square)});
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}function tween(duration,fn){return new Promise(resolve=>{const start=performance.now();function tick(t){const k=Math.min(1,(t-start)/duration);fn(k);if(k<1)requestAnimationFrame(tick);else resolve()}requestAnimationFrame(tick)})}
 async function cameraFocus(attacker,defender){const center=attacker.position.clone().add(defender.position).multiplyScalar(.5);center.y=1;const separation=attacker.position.distanceTo(defender.position);const aspect=camera.aspect;const verticalFov=THREE.MathUtils.degToRad(camera.fov);const horizontalFov=2*Math.atan(Math.tan(verticalFov/2)*aspect);const limitingFov=Math.min(verticalFov,horizontalFov);const radius=Math.max(2.7,separation*.65+1.1);const distance=Math.max(10,(radius/Math.sin(limitingFov/2))*1.2);const side=new THREE.Vector3(1,.65,1).normalize();const to=center.clone().addScaledVector(side,distance);const from=camera.position.clone(),targetFrom=controls.target.clone();await tween(700,k=>{const t=k*k*(3-2*k);camera.position.lerpVectors(from,to,t);controls.target.lerpVectors(targetFrom,center,t);controls.update()})}
 // Lightweight, role-specific visual combat effects. All effects use Three.js primitives.
