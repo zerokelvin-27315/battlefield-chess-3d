@@ -209,6 +209,24 @@ function valleyHeight(x,z){
  const cliffRise=Math.max(0,dist-7)*.065;
  return -3.6+waves+cliffRise;
 }
+// Sloped stone shoulders visually join the plateau cliffs to the valley terrain.
+const shoulderMaterial=new THREE.MeshStandardMaterial({color:'#746e63',roughness:1,side:THREE.DoubleSide});
+for(let side=0;side<4;side++){
+ const verts=[],idx=[],steps=24;
+ for(let j=0;j<=steps;j++){
+  const t=j/steps,along=-4.3+t*8.6;
+  for(let k=0;k<3;k++){
+   const d=k===0?4.08:k===1?5.15:6.6;
+   const x=side<2?along:(side===2?-d:d);
+   const z=side<2?(side===0?-d:d):along;
+   const y=k===0?-.55:k===1?-1.75:valleyHeight(x,z);
+   verts.push(x,y+(environmentRandom()-.5)*.09,z);
+  }
+  if(j<steps){const a=j*3;for(let k=0;k<2;k++){idx.push(a+k,a+k+3,a+k+1,a+k+1,a+k+3,a+k+4)}}
+ }
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));g.setIndex(idx);g.computeVertexNormals();
+ const shoulder=new THREE.Mesh(g,shoulderMaterial);shoulder.receiveShadow=true;alpineSurroundings.add(shoulder);
+}
 // Terrain has a central opening: scenery never overlaps the chessboard.
 const valleyPositions=[],valleyIndices=[],valleyN=70,valleySpan=100;
 for(let iz=0;iz<=valleyN;iz++)for(let ix=0;ix<=valleyN;ix++){
@@ -285,12 +303,12 @@ function setSkybox(id){
  skyDome.visible=id!=='classic';horizonGroup.visible=id!=='classic'&&highlandsTerrain.visible;
  skyDome.material.uniforms.topColor.value.set(sky.top);
  skyDome.material.uniforms.bottomColor.value.set(sky.bottom);
- scene.background.set(sky.bottom);scene.fog.color.set(sky.fog);
+ scene.background.set(sky.bottom);scene.fog.color.set(sky.fog);scene.fog.near=id==='classic'?22:36;scene.fog.far=id==='classic'?49:100;
  sun.color.set(sky.sun);sun.intensity=sky.intensity;
 }
 function setEnvironment(id){
  const chosen=ENVIRONMENTS[id]||ENVIRONMENTS.classic;
- classicTerrain.visible=id==='classic';highlandsTerrain.visible=id==='highlands';horizonGroup.visible=id==='highlands';alpineSurroundings.visible=id==='highlands';
+ classicTerrain.visible=id==='classic';highlandsTerrain.visible=id==='highlands';horizonGroup.visible=id==='highlands'&&mode==='battle';alpineSurroundings.visible=id==='highlands'&&mode==='battle';
  el('environmentSelect').value=id;
  setSkybox(el('skyboxSelect').value);
 }
@@ -521,7 +539,7 @@ el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').
 el('pauseRig').addEventListener('change',()=>{if(el('pauseRig').checked)el('rigFrame').value=Math.round((realisticMixer?.time||0)*100)});
 el('rigFrame').addEventListener('input',()=>{el('pauseRig').checked=true;const t=Number(el('rigFrame').value)/100;for(const mixer of [sourceMixer,referenceMixer,realisticMixer])if(mixer){mixer.setTime(t);mixer.update(0)}updatePoseDiagnostics()});
 function previewBuild(){removeRealistic();previewActors.forEach(a=>{if(a)previewGroup.remove(a)});previewActors=[];[['whitePiece','whiteAnim','w',-1.5],['blackPiece','blackAnim','b',1.5]].forEach(([id,aid,color,x])=>{if(el(id).value==='none'){previewActors.push(null);return}const a=soldier(el(id).value,color);a.position.set(x,.12,0);a.rotation.y=color==='w'?Math.PI/2:-Math.PI/2;setState(a,el(aid).value);if(id==='blackPiece'&&el(aid).value==='dying')a.userData.deathStyle=deathStyleFor(el('whitePiece').value);previewGroup.add(a);previewActors.push(a)});if(el('realisticPreview').checked&&realisticTemplate)attachRealistic()}
-function setMode(next){mode=next;boardGroup.visible=next==='battle';previewGroup.visible=next==='preview';el('battleControls').classList.toggle('hide',next!=='battle');el('previewControls').classList.toggle('hide',next!=='preview');el('battleBtn').classList.toggle('primary',next==='battle');el('previewBtn').classList.toggle('primary',next==='preview');if(next==='preview'){previewBuild();status('Animation preview studio');if(el('realisticPreview').checked)loadRealistic()}else{removeRealistic();status('Select a piece to move')};resetCamera()}
+function setMode(next){mode=next;boardGroup.visible=next==='battle';previewGroup.visible=next==='preview';alpineSurroundings.visible=next==='battle'&&el('environmentSelect').value==='highlands';horizonGroup.visible=next==='battle'&&el('environmentSelect').value==='highlands';el('battleControls').classList.toggle('hide',next!=='battle');el('previewControls').classList.toggle('hide',next!=='preview');el('battleBtn').classList.toggle('primary',next==='battle');el('previewBtn').classList.toggle('primary',next==='preview');if(next==='preview'){previewBuild();status('Animation preview studio');if(el('realisticPreview').checked)loadRealistic()}else{removeRealistic();status('Select a piece to move')};resetCamera()}
 for(const [id,initial] of [['whitePiece','p'],['blackPiece','q']]){if(id==='blackPiece'){const none=document.createElement('option');none.value='none';none.textContent='None (hide black piece)';el(id).append(none)}for(const [key,name] of Object.entries(TYPES)){const o=document.createElement('option');o.value=key;o.textContent=`${SYMBOL[id==='whitePiece'?'w':'b'][key]} ${name}`;el(id).append(o)}el(id).value=initial;el(id).addEventListener('change',previewBuild)}for(const id of ['whiteAnim','blackAnim']){for(const name of ANIMS){const o=document.createElement('option');o.value=name;o.textContent=name[0].toUpperCase()+name.slice(1);el(id).append(o)}el(id).value=id==='blackAnim'?'targeted':'idle';el(id).addEventListener('change',previewBuild)}
 el('battleBtn').onclick=()=>setMode('battle');el('previewBtn').onclick=()=>setMode('preview');el('cameraBtn').onclick=resetCamera;el('previewCamera').onclick=resetCamera;el('resetBtn').onclick=()=>{if(busy)return;game.reset();syncBoard();clearHighlights();selected=null;setMode('battle');status('New game ready')};el('undoBtn').onclick=()=>{if(busy)return;game.undo();syncBoard();clearHighlights();selected=null;status('Last move undone')};el('icons').onchange=()=>{for(const a of [...actors.values(),...previewActors])if(a)a.userData.badge.visible=el('icons').checked};el('testAttack').onclick=async()=>{if(busy)return;busy=true;const panel=document.getElementById('ui');if(!panel.classList.contains('collapsed'))document.getElementById('uiToggle').click();await wait(250);const [a,b]=previewActors;if(!a||!b){status('Select a black piece to test an attack');busy=false;return}setState(a,'highlighted');setState(b,'targeted');status('Preview: acquiring target');await cameraFocus(a,b);setState(a,'attacking');await wait(850);await effect(a,b,a.userData.type);b.userData.deathStyle=deathStyleFor(a.userData.type);startRealisticDeathPreview(b.userData.deathStyle,a.userData.type==='n'?1.45:1.55);setState(b,'dying');await wait(a.userData.type==='n'?1450:a.userData.type==='r'?1550:1250);previewBuild();resetCamera();status('Preview attack complete');busy=false};
 const clock=new THREE.Clock();
