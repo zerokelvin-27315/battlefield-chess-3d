@@ -10,9 +10,9 @@ const ANIMS=['idle','highlighted','targeted','moving','attacking','dying'];
 const el=id=>document.getElementById(id), status=s=>el('status').textContent=s;
 const scene=new THREE.Scene();scene.background=new THREE.Color('#111c25');scene.fog=new THREE.Fog('#111c25',22,49);
 const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,120);camera.position.set(10,15,16);
-const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;el('view').appendChild(renderer.domElement);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;el('view').appendChild(renderer.domElement);
 const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.maxPolarAngle=Math.PI/2.07;controls.minDistance=5;controls.maxDistance=32;controls.target.set(0,0,0);
-scene.add(new THREE.HemisphereLight(0xbed9f0,0x353021,2.0));const sun=new THREE.DirectionalLight(0xffe7c6,2.5);sun.position.set(7,17,9);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-15;sun.shadow.camera.right=15;sun.shadow.camera.top=15;sun.shadow.camera.bottom=-15;scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xbed9f0,0x353021,2.0));const sun=new THREE.DirectionalLight(0xffe7c6,2.5);sun.position.set(-12,12,-18);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-15;sun.shadow.camera.right=15;sun.shadow.camera.top=15;sun.shadow.camera.bottom=-15;scene.add(sun);
 const material=(color,metalness=0)=>new THREE.MeshStandardMaterial({color,roughness:.82,metalness});
 const mats={rock:material('#4b4a42'),light:material('#747369'),dark:material('#444a46'),white:material('#b3b39f'),black:material('#334553'),weapon:material('#20252a',.45),skin:material('#b88d72'),glow:material('#e6b767')};
 const box=(w,h,d,mat)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat),ball=(r,mat)=>new THREE.Mesh(new THREE.SphereGeometry(r,10,8),mat);
@@ -29,7 +29,7 @@ const ENVIRONMENTS=Object.freeze({
 });
 const SKYBOXES=Object.freeze({
  classic:{name:'Classic',top:'#111c25',bottom:'#111c25',fog:'#111c25',sun:'#ffe7c6',intensity:2.5},
- sunset:{name:'Sunset',top:'#435e7d',bottom:'#c1a394',fog:'#a69a96',sun:'#ffcf9a',intensity:2.4},
+ sunset:{name:'Sunset',top:'#465c82',bottom:'#c99583',fog:'#8d8587',sun:'#ffcb89',intensity:3.1},
  daylight:{name:'Clear Day',top:'#5085b4',bottom:'#b6d2dc',fog:'#a8c1c8',sun:'#fff0cb',intensity:2.5},
  mist:{name:'Mountain Mist',top:'#657987',bottom:'#b5b7b1',fog:'#a1a9a7',sun:'#e5e7e0',intensity:1.8},
  moonlight:{name:'Moonlight',top:'#09152c',bottom:'#27394b',fog:'#1e3040',sun:'#a7c4ef',intensity:1.25}
@@ -53,7 +53,7 @@ function slateTexture(seed,light){
  const canvas=document.createElement('canvas');canvas.width=canvas.height=192;
  const ctx=canvas.getContext('2d');let state=seed>>>0;
  const rand=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296};
- const base=light?118:103;
+ const base=light?145:112;
  ctx.fillStyle='rgb('+base+','+(base-3)+','+(base-7)+')';ctx.fillRect(0,0,192,192);
  // Fine-grained stone noise, sediment streaks and irregular mineral patches.
  for(let i=0;i<2400;i++){
@@ -91,7 +91,7 @@ function slateTexture(seed,light){
 const slateMaterials=[];
 for(let i=0;i<12;i++){
  const tex=slateTexture(4919+i*7919,i%2===0);
- slateMaterials.push(new THREE.MeshStandardMaterial({map:tex,roughness:.95,metalness:0,bumpMap:tex,bumpScale:.008}));
+ slateMaterials.push(new THREE.MeshStandardMaterial({map:tex,roughness:.9,metalness:0,bumpMap:tex,bumpScale:.023}));
 }
 const groutMaterial=material('#494943');
 // Preserve exact original chess square centers, clickable surfaces, and piece height.
@@ -296,7 +296,23 @@ for(let layer=0;layer<3;layer++){
 const skyDome=new THREE.Mesh(new THREE.SphereGeometry(90,24,12),new THREE.ShaderMaterial({
  side:THREE.BackSide,depthWrite:false,uniforms:{topColor:{value:new THREE.Color()},bottomColor:{value:new THREE.Color()}},
  vertexShader:'varying vec3 vPosition; void main(){vPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
- fragmentShader:'varying vec3 vPosition;uniform vec3 topColor;uniform vec3 bottomColor;void main(){float t=smoothstep(-.28,.48,normalize(vPosition).y);gl_FragColor=vec4(mix(bottomColor,topColor,t),1.0);}'
+ fragmentShader:`varying vec3 vPosition;uniform vec3 topColor;uniform vec3 bottomColor;
+ float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+ float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
+ void main(){
+ vec3 dir=normalize(vPosition);float h=dir.y;
+ float t=smoothstep(-.15,.62,h);
+ vec3 col=mix(bottomColor,topColor,t);
+ float sun=pow(max(dot(dir,normalize(vec3(-.7,.13,-.7))),0.),450.);
+ col+=vec3(1.,.56,.22)*sun*1.6;
+ float horizonGlow=exp(-abs(h-.08)*8.)*.28;
+ col+=vec3(.92,.38,.13)*horizonGlow;
+ vec2 uv=vec2(atan(dir.z,dir.x)*2.3,dir.y*5.);
+ float cloud=noise(uv*2.2)+.5*noise(uv*5.1)-.72;
+ float mask=smoothstep(.03,.23,cloud)*smoothstep(-.08,.2,h)*(1.-smoothstep(.58,.9,h));
+ col=mix(col,vec3(.88,.65,.56),mask*.38);
+ gl_FragColor=vec4(col,1.);
+ }`
 }));scene.add(skyDome);
 function setSkybox(id){
  const sky=SKYBOXES[id]||SKYBOXES.sunset;
