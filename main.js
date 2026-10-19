@@ -88,62 +88,41 @@ function slateTexture(seed,light){
  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
  texture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());return texture;
 }
-const slateMaterials=[];
-for(let i=0;i<12;i++){
- const tex=slateTexture(4919+i*7919,i%2===0);
- slateMaterials.push(new THREE.MeshStandardMaterial({map:tex,roughness:.9,metalness:0,bumpMap:tex,bumpScale:.023}));
-}
+// Weathered Peak: single aligned 8x8 image, with a separate raised 3D stone frame.
+// The invisible square meshes retain the original chess hit targets and piece coordinates.
 const groutMaterial=material('#48443f');
-// Preserve exact original chess square centers, clickable surfaces, and piece height.
 const highlandsFoundation=box(8.15,.55,8.15,highlandMaterials.stoneDark);
 highlandsFoundation.position.y=-.315;highlandsFoundation.receiveShadow=true;highlandsTerrain.add(highlandsFoundation);
+const weatheredPeakTexture=new THREE.TextureLoader().load(
+ './assets/weathered-peak-board.png',
+ ()=>{weatheredPeakTexture.colorSpace=THREE.SRGBColorSpace;weatheredPeakTexture.needsUpdate=true;},
+ undefined,
+ ()=>{weatheredPeakBoard.material.color.set('#66625a');console.warn('Weathered Peak image missing: place assets/weathered-peak-board.png in repository.');}
+);
+weatheredPeakTexture.colorSpace=THREE.SRGBColorSpace;
+weatheredPeakTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+const weatheredPeakBoard=new THREE.Mesh(
+ new THREE.PlaneGeometry(8,8),
+ new THREE.MeshStandardMaterial({map:weatheredPeakTexture,roughness:.96,metalness:0})
+);
+weatheredPeakBoard.rotation.x=-Math.PI/2;
+weatheredPeakBoard.position.y=.046;
+weatheredPeakBoard.receiveShadow=true;
+highlandsTerrain.add(weatheredPeakBoard);
+const hitMaterial=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false,colorWrite:false});
 for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  const x=file-3.5,z=3.5-rank;
- const base=(file+rank)%2?highlandMaterials.stone:highlandMaterials.stoneLight;
- const top=box(.997,.08,.997,groutMaterial);top.position.set(x,0,z);
- // Subtle tonal variation preserves chess parity without looking like painted tiles.
- const tint=(environmentRandom()-.5)*.095;
- const slate=new THREE.Mesh(new THREE.PlaneGeometry(.977,.977),slateMaterials[((rank*8+file)*5+(file+rank)%2)%slateMaterials.length]);
- slate.rotation.x=-Math.PI/2;slate.position.set(x,.041,z);slate.rotation.z=(environmentRandom()-.5)*.014;
- slate.material.color.offsetHSL(0,0,0);slate.receiveShadow=true;highlandsTerrain.add(slate);
- top.receiveShadow=true;top.userData.square=String.fromCharCode(97+file)+(rank+1);
+ const top=box(.997,.08,.997,hitMaterial);
+ top.position.set(x,0,z);
+ top.userData.square=String.fromCharCode(97+file)+(rank+1);
  highlandsTerrain.add(top);highlandTiles.push(top);
- // Small embedded pebbles stay near edges so pieces and selection remain clear.
- if(environmentRandom()>.45){
-  const dx=(environmentRandom()>.5?1:-1)*(.35+environmentRandom()*.07);
-  const dz=(environmentRandom()>.5?1:-1)*(.34+environmentRandom()*.07);
-  const pebble=highlandRock(highlandsTerrain,x+dx,.045,z+dz,.018+environmentRandom()*.025,highlandMaterials.soil);
-  pebble.castShadow=false;
- }
 }
-// Thin fractured seams suggest natural rock strata without raising walkable surfaces.
-const seamMaterial=new THREE.LineBasicMaterial({color:'#514f4b',transparent:true,opacity:.28,depthWrite:false});
-for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
- if(environmentRandom()<.23)continue;
- const x=file-3.5,z=3.5-rank;
- const startX=x+(environmentRandom()-.5)*.7,startZ=z+(environmentRandom()-.5)*.7;
- const points=[new THREE.Vector3(startX,.045,startZ)];
- let cx=startX,cz=startZ;
- for(let j=0;j<3;j++){
-  cx=Math.max(x-.47,Math.min(x+.47,cx+(environmentRandom()-.5)*.24));
-  cz=Math.max(z-.47,Math.min(z+.47,cz+(environmentRandom()-.5)*.24));
-  points.push(new THREE.Vector3(cx,.045,cz));
- }
- highlandsTerrain.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),seamMaterial));
-}
-// Irregular inset stone patches break up the uniform tile appearance while leaving
-// the flat, clickable 8x8 collision surfaces and original piece heights untouched.
-const patches=[material('#6f6b62'),material('#615f59'),material('#8b8274')];
-for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
- const x=file-3.5,z=3.5-rank;
- if(environmentRandom()<.68)continue;
- const px=x+(environmentRandom()-.5)*.45,pz=z+(environmentRandom()-.5)*.45;
- const radius=.045+environmentRandom()*.095;
- const shape=new THREE.Shape();
- for(let k=0;k<7;k++){const theta=k/7*Math.PI*2,r=radius*(.65+environmentRandom()*.35);const vx=Math.cos(theta)*r,vz=Math.sin(theta)*r;if(k===0)shape.moveTo(vx,vz);else shape.lineTo(vx,vz)}
- shape.closePath();
- const mesh=new THREE.Mesh(new THREE.ShapeGeometry(shape),patches[Math.floor(environmentRandom()*patches.length)]);
- mesh.rotation.x=-Math.PI/2;mesh.position.set(px,.046,pz);mesh.receiveShadow=true;highlandsTerrain.add(mesh);
+// Raised frame is real geometry, independent of the flat board texture.
+const frameMaterial=new THREE.MeshStandardMaterial({color:'#777066',roughness:1,flatShading:true});
+for(let i=0;i<4;i++){
+ const beam=box(i<2?8.46:.25,.22,i<2?.25:8.46,frameMaterial);
+ beam.position.set(i<2?0:(i===2?-4.14:4.14),.09,i<2?(i===0?-4.14:4.14):0);
+ beam.castShadow=true;beam.receiveShadow=true;highlandsTerrain.add(beam);
 }
 // Irregular connected cliff wall. No free-floating rocks: every stone is anchored into the plateau.
 for(let side=0;side<4;side++)for(let i=0;i<24;i++){
