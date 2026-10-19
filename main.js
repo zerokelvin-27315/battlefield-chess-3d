@@ -130,15 +130,21 @@ for(let i=1;i<10;i++)borderOuter.push([-borderHalf-(.035+Math.sin(i*1.9)*.04),bo
 borderOuter.forEach(([x,y],i)=>i?borderShape.lineTo(x,y):borderShape.moveTo(x,y));borderShape.closePath();
 const borderOpening=new THREE.Path();const openingHalf=4.02;
 borderOpening.moveTo(-openingHalf,-openingHalf);borderOpening.lineTo(-openingHalf,openingHalf);borderOpening.lineTo(openingHalf,openingHalf);borderOpening.lineTo(openingHalf,-openingHalf);borderOpening.closePath();borderShape.holes.push(borderOpening);
-const weatheredRim=new THREE.Mesh(new THREE.ExtrudeGeometry(borderShape,{depth:.18,steps:1,bevelEnabled:true,bevelSegments:2,bevelThickness:.022,bevelSize:.018}),
- new THREE.MeshStandardMaterial({color:'#655e52',roughness:1,flatShading:true}));
-weatheredRim.name='Raised weathered stone border';weatheredRim.rotation.x=-Math.PI/2;weatheredRim.position.y=-.018;weatheredRim.castShadow=true;weatheredRim.receiveShadow=true;highlandsTerrain.add(weatheredRim);
 const weatheredBorderTexture=new THREE.TextureLoader().load('./assets/weathered-peak-border.png',()=>{weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.needsUpdate=true;},undefined,()=>console.warn('Weathered Peak border image missing: place assets/weathered-peak-border.png in repository.'));
 weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
-// The source artwork is a complete board with a transparent cutout over its playable center.
-// This top skin follows the raised ring while leaving all 64 playable squares unobstructed.
-const weatheredBorderTop=new THREE.Mesh(new THREE.PlaneGeometry(borderHalf*2,borderHalf*2),new THREE.MeshStandardMaterial({map:weatheredBorderTexture,roughness:.98,metalness:0,transparent:true,alphaTest:.04,depthWrite:false,side:THREE.DoubleSide}));
-weatheredBorderTop.name='Weathered Peak textured border top';weatheredBorderTop.rotation.x=-Math.PI/2;weatheredBorderTop.position.y=.19;weatheredBorderTop.receiveShadow=true;highlandsTerrain.add(weatheredBorderTop);
+const weatheredRimGeometry=new THREE.ExtrudeGeometry(borderShape,{depth:.18,steps:1,bevelEnabled:true,bevelSegments:2,bevelThickness:.022,bevelSize:.018});
+// ExtrudeGeometry puts its two cap surfaces in material group 1. Project those cap UVs
+// across the full transparent frame artwork so every side is textured on the actual raised mesh.
+const rimPositions=weatheredRimGeometry.attributes.position,rimUvs=weatheredRimGeometry.attributes.uv,rimIndices=weatheredRimGeometry.index;
+for(const group of weatheredRimGeometry.groups.filter(g=>g.materialIndex===1))for(let i=group.start;i<group.start+group.count;i++){
+ const vertex=rimIndices.getX(i),u=(rimPositions.getX(vertex)+borderHalf)/(borderHalf*2),v=(rimPositions.getY(vertex)+borderHalf)/(borderHalf*2);rimUvs.setXY(vertex,u,v);
+}
+rimUvs.needsUpdate=true;
+const weatheredRim=new THREE.Mesh(weatheredRimGeometry,[
+ new THREE.MeshStandardMaterial({color:'#655e52',roughness:1,flatShading:true}),
+ new THREE.MeshStandardMaterial({map:weatheredBorderTexture,roughness:.98,metalness:0,alphaTest:.1,flatShading:false})
+]);
+weatheredRim.name='Raised textured Weathered Peak stone border';weatheredRim.rotation.x=-Math.PI/2;weatheredRim.position.y=-.018;weatheredRim.castShadow=true;weatheredRim.receiveShadow=true;highlandsTerrain.add(weatheredRim);
 // Irregular connected cliff wall. No free-floating rocks: every stone is anchored into the plateau.
 for(let side=0;side<4;side++)for(let i=0;i<24;i++){
  const along=-4.1+i*8.2/23+(environmentRandom()-.5)*.22;
