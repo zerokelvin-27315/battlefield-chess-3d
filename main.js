@@ -133,11 +133,11 @@ borderOpening.moveTo(-openingHalf,-openingHalf);borderOpening.lineTo(-openingHal
 const weatheredBorderTexture=new THREE.TextureLoader().load('./assets/weathered-peak-border.png',()=>{weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.needsUpdate=true;},undefined,()=>console.warn('Weathered Peak border image missing: place assets/weathered-peak-border.png in repository.'));
 weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 const weatheredRimGeometry=new THREE.ExtrudeGeometry(borderShape,{depth:.18,steps:1,bevelEnabled:true,bevelSegments:2,bevelThickness:.022,bevelSize:.018});
-// ExtrudeGeometry puts its two cap surfaces in material group 1. Project those cap UVs
+// ExtrudeGeometry is non-indexed; its cap triangles are in material group 1. Project those cap UVs
 // across the full transparent frame artwork so every side is textured on the actual raised mesh.
-const rimPositions=weatheredRimGeometry.attributes.position,rimUvs=weatheredRimGeometry.attributes.uv,rimIndices=weatheredRimGeometry.index;
+const rimPositions=weatheredRimGeometry.attributes.position,rimUvs=weatheredRimGeometry.attributes.uv;
 for(const group of weatheredRimGeometry.groups.filter(g=>g.materialIndex===1))for(let i=group.start;i<group.start+group.count;i++){
- const vertex=rimIndices.getX(i),u=(rimPositions.getX(vertex)+borderHalf)/(borderHalf*2),v=(rimPositions.getY(vertex)+borderHalf)/(borderHalf*2);rimUvs.setXY(vertex,u,v);
+ const vertex=i,u=(rimPositions.getX(vertex)+borderHalf)/(borderHalf*2),v=(rimPositions.getY(vertex)+borderHalf)/(borderHalf*2);rimUvs.setXY(vertex,u,v);
 }
 rimUvs.needsUpdate=true;
 const weatheredRim=new THREE.Mesh(weatheredRimGeometry,[
