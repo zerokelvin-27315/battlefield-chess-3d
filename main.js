@@ -130,19 +130,48 @@ for(let i=1;i<10;i++)borderOuter.push([-borderHalf-(.035+Math.sin(i*1.9)*.04),bo
 borderOuter.forEach(([x,y],i)=>i?borderShape.lineTo(x,y):borderShape.moveTo(x,y));borderShape.closePath();
 const borderOpening=new THREE.Path();const openingHalf=4.02;
 borderOpening.moveTo(-openingHalf,-openingHalf);borderOpening.lineTo(-openingHalf,openingHalf);borderOpening.lineTo(openingHalf,openingHalf);borderOpening.lineTo(openingHalf,-openingHalf);borderOpening.closePath();borderShape.holes.push(borderOpening);
-const weatheredBorderTexture=new THREE.TextureLoader().load('./assets/weathered-peak-border.png?v=0.8.0',()=>{weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.needsUpdate=true;},undefined,()=>console.warn('Weathered Peak border image missing: place assets/weathered-peak-border.png in repository.'));
+// One atlas: transparent cap frame in the left half, generated side-face tile in the right half.
+const weatheredBorderTexture=new THREE.TextureLoader().load('./assets/weathered-peak-border-atlas.png?v=0.8.1',()=>{weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.needsUpdate=true;},undefined,()=>console.warn('Weathered Peak border atlas missing: rebuild assets/weathered-peak-border-atlas.png.'));
 weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 const weatheredRimGeometry=new THREE.ExtrudeGeometry(borderShape,{depth:.18,steps:1,bevelEnabled:true,bevelSegments:2,bevelThickness:.022,bevelSize:.018});
-// ExtrudeGeometry is non-indexed; its cap triangles are in material group 0. Project those cap UVs
-// across the full transparent frame artwork so every side is textured on the actual raised mesh.
-const rimPositions=weatheredRimGeometry.attributes.position,rimUvs=weatheredRimGeometry.attributes.uv;
-for(const group of weatheredRimGeometry.groups.filter(g=>g.materialIndex===0))for(let i=group.start;i<group.start+group.count;i++){
- const vertex=i,u=(rimPositions.getX(vertex)+borderHalf)/(borderHalf*2),v=(rimPositions.getY(vertex)+borderHalf)/(borderHalf*2);rimUvs.setXY(vertex,u,v);
+// ExtrudeGeometry is non-indexed: group 0 is both horizontal caps; group 1 is vertical sidewalls.
+// Shape x/y become world x/-z after rotation; extrusion z becomes world height.
+const rimPositions=weatheredRimGeometry.attributes.position,rimNormals=weatheredRimGeometry.attributes.normal,rimUvs=weatheredRimGeometry.attributes.uv;
+const atlasTop={u:8/2048,v:8/1024,w:1008/2048,h:1008/1024};
+const atlasSide={u:1032/2048,v:(1024-288-447)/1024,w:1008/2048,h:447/1024};
+for(const group of weatheredRimGeometry.groups){
+ if(group.materialIndex===0){
+  for(let i=group.start;i<group.start+group.count;i++){
+   const u=(rimPositions.getX(i)+borderHalf)/(borderHalf*2),v=(rimPositions.getY(i)+borderHalf)/(borderHalf*2);
+   rimUvs.setXY(i,atlasTop.u+u*atlasTop.w,atlasTop.v+v*atlasTop.h);
+  }
+ }else if(group.materialIndex===1){
+  for(let i=group.start;i<group.start+group.count;i++){
+   const nx=Math.abs(rimNormals.getX(i)),ny=Math.abs(rimNormals.getY(i));
+   // A face whose normal points along local X runs along local Y; otherwise it runs along X.
+   const along=nx>ny?rimPositions.getY(i):rimPositions.getX(i);
+   const u=along/2.25;
+   const v=Math.max(0,Math.min(1,(rimPositions.getZ(i)+.022)/(.18+.044)));
+   rimUvs.setXY(i,u,v);
+  }
+ }
 }
 rimUvs.needsUpdate=true;
+const sideStoneMaterial=new THREE.MeshStandardMaterial({map:weatheredBorderTexture,roughness:.98,metalness:0,flatShading:true});
+sideStoneMaterial.onBeforeCompile=shader=>{
+ shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
+  float atlasTile=floor(vMapUv.x);
+  float atlasU=fract(vMapUv.x);
+  if(mod(atlasTile,2.0)>0.5) atlasU=1.0-atlasU;
+  vec2 sideAtlasUv=vec2(${atlasSide.u.toFixed(8)}+atlasU*${atlasSide.w.toFixed(8)},${atlasSide.v.toFixed(8)}+clamp(vMapUv.y,0.0,1.0)*${atlasSide.h.toFixed(8)});
+  vec4 sampledDiffuseColor=texture2D(map,sideAtlasUv);
+  diffuseColor*=sampledDiffuseColor;
+ #endif`);
+};
+sideStoneMaterial.customProgramCacheKey=()=> 'weathered-peak-atlas-side-v1';
 const weatheredRim=new THREE.Mesh(weatheredRimGeometry,[
  new THREE.MeshStandardMaterial({map:weatheredBorderTexture,roughness:.98,metalness:0,alphaTest:.1}),
- new THREE.MeshStandardMaterial({color:'#655e52',roughness:1,flatShading:true})
+ sideStoneMaterial
 ]);
 weatheredRim.name='Raised textured Weathered Peak stone border';weatheredRim.rotation.x=-Math.PI/2;weatheredRim.position.y=-.018;weatheredRim.castShadow=true;weatheredRim.receiveShadow=true;highlandsTerrain.add(weatheredRim);
 // Irregular connected cliff wall. No free-floating rocks: every stone is anchored into the plateau.
