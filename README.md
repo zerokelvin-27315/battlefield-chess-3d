@@ -1,4 +1,4 @@
-# Battlefield Chess 3D — Prototype 1 (v0.8.3)
+# Battlefield Chess 3D — Prototype 1 (v0.8.4)
 
 Playable 3D chess with procedural military characters, rocky terrain, a character animation preview studio, and cinematic capture sequences.
 
@@ -31,7 +31,7 @@ Cloudflare Pages: connect this GitHub repository, select branch `main`, framewor
 - Bone mapping report with rest-pose quaternion and hierarchy differences; live local Euler snapshots for pelvis, spine, neck, head, arm, and leg joints
 - Soldier's original embedded animation remains available as Celebration Dance
 - Toggleable camera-facing chess symbols, reset, and undo
-- Weathered Peak board island lowered into the alpine terrain with a continuous, corner-sealed cliff mesh
+- Weathered Peak board island embedded in a continuous alpine terrain grid, with a corner-sealed cliff mesh and no river
 
 ## Rig and retarget notes
 

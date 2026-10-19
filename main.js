@@ -9,7 +9,7 @@ const SYMBOL={w:{p:'♙',r:'♖',n:'♘',b:'♗',q:'♕',k:'♔'},b:{p:'♟',r:'
 const ANIMS=['idle','highlighted','targeted','moving','attacking','dying'];
 const el=id=>document.getElementById(id), status=s=>el('status').textContent=s;
 const scene=new THREE.Scene();scene.background=new THREE.Color('#111c25');scene.fog=new THREE.Fog('#111c25',22,49);
-const HIGHLANDS_BOARD_ELEVATION=-4.8;
+const HIGHLANDS_BOARD_ELEVATION=-6.2;
 const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,120);camera.position.set(10,15+HIGHLANDS_BOARD_ELEVATION,16);
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;el('view').appendChild(renderer.domElement);
 const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.maxPolarAngle=Math.PI/2.07;controls.minDistance=5;controls.maxDistance=32;controls.target.set(0,HIGHLANDS_BOARD_ELEVATION,0);
@@ -219,7 +219,6 @@ const alpineSurroundings=new THREE.Group();scene.add(alpineSurroundings);
 const valleyMats={
  cliff:material('#716e67'),cliffLight:material('#969084'),forest:material('#344d3e'),
  pine:material('#405c47'),pineLight:material('#607051'),trunk:material('#54483a'),
- lake:new THREE.MeshStandardMaterial({color:'#658f9c',metalness:.25,roughness:.27}),
  mist:new THREE.MeshBasicMaterial({color:'#b8c3c6',transparent:true,opacity:.14,depthWrite:false,side:THREE.DoubleSide})
 };
 const treeTrunk=new THREE.CylinderGeometry(.07,.11,.8,5),treeCrown=new THREE.ConeGeometry(.65,2.1,6);
@@ -269,7 +268,7 @@ for(let j=0;j<cliffLoopSteps;j++){
 }
 const cliffGeometry=new THREE.BufferGeometry();cliffGeometry.setAttribute('position',new THREE.Float32BufferAttribute(cliffVertices,3));cliffGeometry.setIndex(cliffIndices);cliffGeometry.computeVertexNormals();
 const cliffMesh=new THREE.Mesh(cliffGeometry,shoulderMaterial);cliffMesh.position.y=HIGHLANDS_BOARD_ELEVATION;cliffMesh.receiveShadow=true;alpineSurroundings.add(cliffMesh);
-// The terrain begins just outside the cliff footprint so its surface intersects the lowered rock skirt.
+// A continuous terrain grid runs beneath the lowered island and intersects the cliff skirt on every side.
 const valleyPositions=[],valleyIndices=[],valleyN=70,valleySpan=100;
 for(let iz=0;iz<=valleyN;iz++)for(let ix=0;ix<=valleyN;ix++){
  const x=(ix/valleyN-.5)*valleySpan,z=(iz/valleyN-.5)*valleySpan;
@@ -277,8 +276,6 @@ for(let iz=0;iz<=valleyN;iz++)for(let ix=0;ix<=valleyN;ix++){
  valleyPositions.push(x,y,z);
 }
 for(let iz=0;iz<valleyN;iz++)for(let ix=0;ix<valleyN;ix++){
- const cx=(ix+.5)/valleyN*valleySpan-valleySpan/2,cz=(iz+.5)/valleyN*valleySpan-valleySpan/2;
- if(Math.abs(cx)<5.3&&Math.abs(cz)<5.3)continue;
  const a=iz*(valleyN+1)+ix,b=a+1,c=a+valleyN+1,d=c+1;
  valleyIndices.push(a,c,b,b,c,d);
 }
@@ -329,14 +326,6 @@ for(let side=0;side<4;side++)for(let level=0;level<3;level++){
  }
  highlandsTerrain.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),strataMat));
 }
-// River valley with warm reflected sky, well below the board.
-const riverShape=new THREE.Shape();
-riverShape.moveTo(-2,-48);riverShape.bezierCurveTo(5,-28,-14,-10,-9,1);
-riverShape.bezierCurveTo(-4,13,13,26,8,48);
-riverShape.lineTo(11,48);riverShape.bezierCurveTo(16,26,-1,13,-6,1);
-riverShape.bezierCurveTo(-11,-10,8,-28,1,-48);riverShape.closePath();
-const river=new THREE.Mesh(new THREE.ShapeGeometry(riverShape),valleyMats.lake);
-river.rotation.x=-Math.PI/2;river.position.y=-8.1;river.receiveShadow=false;alpineSurroundings.add(river);
 // Soft atmospheric strips add depth at low cost on mobile.
 for(let i=0;i<5;i++){
  const mist=new THREE.Mesh(new THREE.PlaneGeometry(35,4),valleyMats.mist);
