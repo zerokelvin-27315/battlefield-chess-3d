@@ -100,6 +100,8 @@ const weatheredPeakTexture=new THREE.TextureLoader().load(
  ()=>{weatheredPeakBoard.material.color.set('#66625a');console.warn('Weathered Peak image missing: place assets/weathered-peak-board.png in repository.');}
 );
 weatheredPeakTexture.colorSpace=THREE.SRGBColorSpace;
+// The source image starts with a light square at its upper-left; mirror files so a1 stays light.
+weatheredPeakTexture.repeat.x=-1;weatheredPeakTexture.offset.x=1;weatheredPeakTexture.needsUpdate=true;
 weatheredPeakTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 const weatheredPeakBoard=new THREE.Mesh(
  new THREE.PlaneGeometry(8,8),
@@ -117,17 +119,24 @@ for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
  top.userData.square=String.fromCharCode(97+file)+(rank+1);
  highlandsTerrain.add(top);highlandTiles.push(top);
 }
-// Raised frame is real geometry, independent of the flat board texture.
-const frameMaterial=new THREE.MeshStandardMaterial({color:'#777066',roughness:1,flatShading:true});
-for(let i=0;i<4;i++){
- const beam=box(i<2?8.46:.25,.22,i<2?.25:8.46,frameMaterial);
- beam.position.set(i<2?0:(i===2?-4.14:4.14),.09,i<2?(i===0?-4.14:4.14):0);
- beam.castShadow=true;beam.receiveShadow=true;highlandsTerrain.add(beam);
-}
+// Raised weathered-stone rim. Its inner edge stays at least 0.08m beyond the 8x8 surface.
+const borderShape=new THREE.Shape();
+const borderOuter=[];
+const borderHalf=4.42;
+for(let i=0;i<=10;i++)borderOuter.push([-borderHalf+i*(borderHalf*2/10),-borderHalf-(i===0||i===10?0:.045+Math.sin(i*2.3)*.035)]);
+for(let i=1;i<=10;i++)borderOuter.push([borderHalf+(i===10?0:.04+Math.sin(i*1.7)*.035),-borderHalf+i*(borderHalf*2/10)]);
+for(let i=1;i<=10;i++)borderOuter.push([borderHalf-i*(borderHalf*2/10),borderHalf+(i===10?0:.05+Math.sin(i*2.1)*.03)]);
+for(let i=1;i<10;i++)borderOuter.push([-borderHalf-(.035+Math.sin(i*1.9)*.04),borderHalf-i*(borderHalf*2/10)]);
+borderOuter.forEach(([x,y],i)=>i?borderShape.lineTo(x,y):borderShape.moveTo(x,y));borderShape.closePath();
+const borderOpening=new THREE.Path();const openingHalf=4.12;
+borderOpening.moveTo(-openingHalf,-openingHalf);borderOpening.lineTo(-openingHalf,openingHalf);borderOpening.lineTo(openingHalf,openingHalf);borderOpening.lineTo(openingHalf,-openingHalf);borderOpening.closePath();borderShape.holes.push(borderOpening);
+const weatheredRim=new THREE.Mesh(new THREE.ExtrudeGeometry(borderShape,{depth:.16,steps:1,bevelEnabled:true,bevelSegments:1,bevelThickness:.018,bevelSize:.012}),
+ new THREE.MeshStandardMaterial({color:'#777066',roughness:1,flatShading:true}));
+weatheredRim.rotation.x=-Math.PI/2;weatheredRim.position.y=-.018;weatheredRim.castShadow=true;weatheredRim.receiveShadow=true;highlandsTerrain.add(weatheredRim);
 // Irregular connected cliff wall. No free-floating rocks: every stone is anchored into the plateau.
 for(let side=0;side<4;side++)for(let i=0;i<24;i++){
  const along=-4.1+i*8.2/23+(environmentRandom()-.5)*.22;
- const out=4.12+(environmentRandom()-.5)*.28;
+ const out=5.34+(environmentRandom()-.5)*.16;
  const x=side<2?along:(side===2?-out:out);
  const z=side<2?(side===0?-out:out):along;
  const height=.55+Math.pow(environmentRandom(),1.6)*1.65;
@@ -136,8 +145,8 @@ for(let side=0;side<4;side++)for(let i=0;i<24;i++){
  rock.scale.set(.7+environmentRandom()*.85,height/(rock.geometry.parameters.radius*1.7),.65+environmentRandom()*.9);
 }
 for(let i=0;i<80;i++){
- const x=(environmentRandom()-.5)*9.4,z=(environmentRandom()-.5)*9.4;
- if(Math.abs(x)<4.02&&Math.abs(z)<4.02)continue;
+ const side=Math.floor(environmentRandom()*4),along=(environmentRandom()-.5)*9.6,out=4.72+environmentRandom()*.3;
+ const x=side<2?along:(side===2?-out:out),z=side<2?(side===0?-out:out):along;
  highlandRock(highlandsTerrain,x,-.65,z,.14+environmentRandom()*.3,highlandMaterials.stoneDark);
 }
 for(let i=0;i<55;i++){
@@ -149,8 +158,8 @@ for(let i=0;i<55;i++){
 // Scattered ledges beneath the cliff lip break the repetitive hanging-rock outline.
 for(let i=0;i<30;i++){
  const side=Math.floor(environmentRandom()*4),along=(environmentRandom()-.5)*7.8;
- const x=side<2?along:(side===2?-4.15:4.15);
- const z=side<2?(side===0?-4.15:4.15):along;
+ const x=side<2?along:(side===2?-5.15:5.15);
+ const z=side<2?(side===0?-5.15:5.15):along;
  const ledge=highlandRock(highlandsTerrain,x,-.8-environmentRandom()*.65,z,.24+environmentRandom()*.35,
  environmentRandom()>.5?highlandMaterials.stone:highlandMaterials.stoneDark);
  ledge.scale.set(.8+environmentRandom()*.8,.5+environmentRandom()*.9,.8+environmentRandom()*.8);
@@ -158,8 +167,8 @@ for(let i=0;i<30;i++){
 // Tiny vegetation clusters sit on the outer shoulder, away from chess pieces.
 for(let i=0;i<85;i++){
  const side=Math.floor(environmentRandom()*4),along=(environmentRandom()-.5)*7.8;
- const x=side<2?along:(side===2?-4.02:4.02);
- const z=side<2?(side===0?-4.02:4.02):along;
+ const x=side<2?along:(side===2?-4.68:4.68);
+ const z=side<2?(side===0?-4.68:4.68):along;
  const grass=new THREE.Mesh(new THREE.ConeGeometry(.055,.15+environmentRandom()*.12,5),highlandMaterials.grass);
  grass.position.set(x,.065,z);grass.castShadow=false;highlandsTerrain.add(grass);
 }
@@ -626,3 +635,4 @@ u.badge.visible=el('icons').checked&&!(a===previewActors[0]&&realisticActor);
 controls.update();renderer.render(scene,camera);
 }
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});syncBoard();setMode('battle');animate();
+
