@@ -1,4 +1,4 @@
-# Battlefield Chess 3D — Prototype 1 (v0.4.11)
+# Battlefield Chess 3D — Prototype 1 (v0.7.4)
 
 Playable 3D chess with procedural military characters, rocky terrain, a character animation preview studio, and cinematic capture sequences.
 

@@ -122,17 +122,23 @@ for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){
 // Raised weathered-stone rim. Its inner edge stays at least 0.08m beyond the 8x8 surface.
 const borderShape=new THREE.Shape();
 const borderOuter=[];
-const borderHalf=4.42;
+const borderHalf=4.62;
 for(let i=0;i<=10;i++)borderOuter.push([-borderHalf+i*(borderHalf*2/10),-borderHalf-(i===0||i===10?0:.045+Math.sin(i*2.3)*.035)]);
 for(let i=1;i<=10;i++)borderOuter.push([borderHalf+(i===10?0:.04+Math.sin(i*1.7)*.035),-borderHalf+i*(borderHalf*2/10)]);
 for(let i=1;i<=10;i++)borderOuter.push([borderHalf-i*(borderHalf*2/10),borderHalf+(i===10?0:.05+Math.sin(i*2.1)*.03)]);
 for(let i=1;i<10;i++)borderOuter.push([-borderHalf-(.035+Math.sin(i*1.9)*.04),borderHalf-i*(borderHalf*2/10)]);
 borderOuter.forEach(([x,y],i)=>i?borderShape.lineTo(x,y):borderShape.moveTo(x,y));borderShape.closePath();
-const borderOpening=new THREE.Path();const openingHalf=4.12;
+const borderOpening=new THREE.Path();const openingHalf=4.02;
 borderOpening.moveTo(-openingHalf,-openingHalf);borderOpening.lineTo(-openingHalf,openingHalf);borderOpening.lineTo(openingHalf,openingHalf);borderOpening.lineTo(openingHalf,-openingHalf);borderOpening.closePath();borderShape.holes.push(borderOpening);
-const weatheredRim=new THREE.Mesh(new THREE.ExtrudeGeometry(borderShape,{depth:.16,steps:1,bevelEnabled:true,bevelSegments:1,bevelThickness:.018,bevelSize:.012}),
- new THREE.MeshStandardMaterial({color:'#777066',roughness:1,flatShading:true}));
-weatheredRim.rotation.x=-Math.PI/2;weatheredRim.position.y=-.018;weatheredRim.castShadow=true;weatheredRim.receiveShadow=true;highlandsTerrain.add(weatheredRim);
+const weatheredRim=new THREE.Mesh(new THREE.ExtrudeGeometry(borderShape,{depth:.18,steps:1,bevelEnabled:true,bevelSegments:2,bevelThickness:.022,bevelSize:.018}),
+ new THREE.MeshStandardMaterial({color:'#655e52',roughness:1,flatShading:true}));
+weatheredRim.name='Raised weathered stone border';weatheredRim.rotation.x=-Math.PI/2;weatheredRim.position.y=-.018;weatheredRim.castShadow=true;weatheredRim.receiveShadow=true;highlandsTerrain.add(weatheredRim);
+const weatheredBorderTexture=new THREE.TextureLoader().load('./assets/weathered-peak-border.png',()=>{weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.needsUpdate=true;},undefined,()=>console.warn('Weathered Peak border image missing: place assets/weathered-peak-border.png in repository.'));
+weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+// The source artwork is a complete board with a transparent cutout over its playable center.
+// This top skin follows the raised ring while leaving all 64 playable squares unobstructed.
+const weatheredBorderTop=new THREE.Mesh(new THREE.PlaneGeometry(borderHalf*2,borderHalf*2),new THREE.MeshStandardMaterial({map:weatheredBorderTexture,roughness:.98,metalness:0,transparent:true,alphaTest:.04,depthWrite:false,side:THREE.DoubleSide}));
+weatheredBorderTop.name='Weathered Peak textured border top';weatheredBorderTop.rotation.x=-Math.PI/2;weatheredBorderTop.position.y=.166;weatheredBorderTop.receiveShadow=true;highlandsTerrain.add(weatheredBorderTop);
 // Irregular connected cliff wall. No free-floating rocks: every stone is anchored into the plateau.
 for(let side=0;side<4;side++)for(let i=0;i<24;i++){
  const along=-4.1+i*8.2/23+(environmentRandom()-.5)*.22;
