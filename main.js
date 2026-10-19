@@ -138,7 +138,7 @@ weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.an
 // The source artwork is a complete board with a transparent cutout over its playable center.
 // This top skin follows the raised ring while leaving all 64 playable squares unobstructed.
 const weatheredBorderTop=new THREE.Mesh(new THREE.PlaneGeometry(borderHalf*2,borderHalf*2),new THREE.MeshStandardMaterial({map:weatheredBorderTexture,roughness:.98,metalness:0,transparent:true,alphaTest:.04,depthWrite:false,side:THREE.DoubleSide}));
-weatheredBorderTop.name='Weathered Peak textured border top';weatheredBorderTop.rotation.x=-Math.PI/2;weatheredBorderTop.position.y=.166;weatheredBorderTop.receiveShadow=true;highlandsTerrain.add(weatheredBorderTop);
+weatheredBorderTop.name='Weathered Peak textured border top';weatheredBorderTop.rotation.x=-Math.PI/2;weatheredBorderTop.position.y=.19;weatheredBorderTop.receiveShadow=true;highlandsTerrain.add(weatheredBorderTop);
 // Irregular connected cliff wall. No free-floating rocks: every stone is anchored into the plateau.
 for(let side=0;side<4;side++)for(let i=0;i<24;i++){
  const along=-4.1+i*8.2/23+(environmentRandom()-.5)*.22;
