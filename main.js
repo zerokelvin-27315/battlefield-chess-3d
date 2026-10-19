@@ -130,7 +130,7 @@ for(let i=1;i<10;i++)borderOuter.push([-borderHalf-(.035+Math.sin(i*1.9)*.04),bo
 borderOuter.forEach(([x,y],i)=>i?borderShape.lineTo(x,y):borderShape.moveTo(x,y));borderShape.closePath();
 const borderOpening=new THREE.Path();const openingHalf=4.02;
 borderOpening.moveTo(-openingHalf,-openingHalf);borderOpening.lineTo(-openingHalf,openingHalf);borderOpening.lineTo(openingHalf,openingHalf);borderOpening.lineTo(openingHalf,-openingHalf);borderOpening.closePath();borderShape.holes.push(borderOpening);
-const weatheredBorderTexture=new THREE.TextureLoader().load('./assets/weathered-peak-border.png',()=>{weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.needsUpdate=true;},undefined,()=>console.warn('Weathered Peak border image missing: place assets/weathered-peak-border.png in repository.'));
+const weatheredBorderTexture=new THREE.TextureLoader().load('./assets/weathered-peak-border.png?v=0.7.8',()=>{weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.needsUpdate=true;},undefined,()=>console.warn('Weathered Peak border image missing: place assets/weathered-peak-border.png in repository.'));
 weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 const weatheredRimGeometry=new THREE.ExtrudeGeometry(borderShape,{depth:.18,steps:1,bevelEnabled:true,bevelSegments:2,bevelThickness:.022,bevelSize:.018});
 // ExtrudeGeometry is non-indexed; its cap triangles are in material group 1. Project those cap UVs
