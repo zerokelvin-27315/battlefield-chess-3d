@@ -4,6 +4,8 @@ import {Chess} from 'https://esm.sh/chess.js@1.0.0';
 import {GLTFLoader} from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
 import {clone as cloneSkeleton} from 'https://esm.sh/three@0.169.0/examples/jsm/utils/SkeletonUtils.js';
 
+import {createRifleman,disposeRifleman,calibrateRiflemanWeapon,updateRiflemanGrip} from './rifleman.js';
+
 const TYPES={p:'Private',r:'Radio operator',n:'Grenadier',b:'Machine gunner',q:'Sniper',k:'General'};
 const SYMBOL={w:{p:'♙',r:'♖',n:'♘',b:'♗',q:'♕',k:'♔'},b:{p:'♟',r:'♜',n:'♞',b:'♝',q:'♛',k:'♚'}};
 const ANIMS=['idle','highlighted','targeted','moving','attacking','dying'];
@@ -511,7 +513,7 @@ flash(origin,0xffcc76,.17);const bullet=spawn(new THREE.SphereGeometry(.045,8,6)
 }
 async function walk(actor,target,type){const start=actor.position.clone(),end=new THREE.Vector3(target.x,.12,target.z);setState(actor,'moving');await tween(type==='n'?650:950,k=>{actor.position.lerpVectors(start,end,k);if(type==='n')actor.position.y+=Math.sin(k*Math.PI)*1.9});setState(actor,'idle')}
 async function performMove(from,to){busy=true;clearHighlights();const attacker=actors.get(from),type=attacker.userData.type;const move=game.move({from,to,promotion:'q'});if(!move){busy=false;return}const enPassant=move.flags.includes('e');const capturedSquare=enPassant?to[0]+from[1]:to;const victim=actors.get(capturedSquare);selected=null;legal=[];status(victim?`${TYPES[type]} attacks ${TYPES[victim.userData.type]}!`:`${TYPES[type]} advances to ${to}`);const dest=squareToWorld(to);if(victim){setState(victim,'targeted');if(el('cinematic').checked)await cameraFocus(attacker,victim);setState(attacker,'attacking');await wait(type==='r'?950:650);await effect(attacker,victim,type,from,capturedSquare);victim.userData.deathStyle=deathStyleFor(type);setState(victim,'dying');await wait(type==='n'?1450:type==='r'?1550:650);setState(attacker,'idle');await walk(attacker,dest,type);setState(victim,'idle');await tween(650,k=>{victim.position.y=.12-k*1.7;victim.scale.setScalar(1-.25*k)});boardGroup.remove(victim);actors.delete(capturedSquare)}else await walk(attacker,dest,type);actors.delete(from);actors.set(to,attacker);if(move.flags.includes('k')||move.flags.includes('q')||move.flags.includes('e')||move.flags.includes('p'))syncBoard();if(victim&&el('cinematic').checked)resetCamera();updateTurn();status(game.isGameOver()?'Game over':`${game.turn()==='w'?'White':'Black'} to move`);busy=false}
-function resetCamera(){const from=camera.position.clone(),fromTarget=controls.target.clone(),elevation=el('environmentSelect').value==='highlands'?HIGHLANDS_BOARD_ELEVATION:0,to=mode==='battle'?new THREE.Vector3(10,15+elevation,16):new THREE.Vector3(0,4.5,14.5),target=mode==='battle'?new THREE.Vector3(0,elevation,0):new THREE.Vector3(0,.45,0);tween(600,k=>{camera.position.lerpVectors(from,to,k);controls.target.lerpVectors(fromTarget,target,k);controls.update()})}
+function resetCamera(){controls.minDistance=mode==='preview'&&el('riflemanPreview').checked?1.8:5;const from=camera.position.clone(),fromTarget=controls.target.clone(),elevation=el('environmentSelect').value==='highlands'?HIGHLANDS_BOARD_ELEVATION:0,to=mode==='battle'?new THREE.Vector3(10,15+elevation,16):el('riflemanPreview').checked?new THREE.Vector3(2.1,1.55,3.5):new THREE.Vector3(0,4.5,14.5),target=mode==='battle'?new THREE.Vector3(0,elevation,0):el('riflemanPreview').checked?new THREE.Vector3(0,.68,0):new THREE.Vector3(0,.45,0);tween(600,k=>{camera.position.lerpVectors(from,to,k);controls.target.lerpVectors(fromTarget,target,k);controls.update()})}
 // v0.4.11 fixes Rook battle-capture napalm positions and recovers cleanly from effect errors.
 // v0.4.10 previews custom Rook and Knight deaths on the realistic soldier rig.
 // v0.4.9 aligns the preview fire lane and backward grenade flip.
@@ -522,7 +524,7 @@ let referenceTemplate=null,referenceMixer=null,referenceActor=null,referenceWrap
 const realisticLoader=new GLTFLoader();
 // Keep animation tracks from overriding the global miniature scale.
 const RIG_PREVIEW_HEIGHT=1.1;
-function removeRealistic(){for(const mixer of [realisticMixer,referenceMixer,sourceMixer])mixer?.stopAllAction();realisticMixer=referenceMixer=sourceMixer=null;for(const o of diagnosticObjects){previewGroup.remove(o);o.traverse(x=>{if(x.isSprite){x.material.map?.dispose();x.material.dispose()}if(x.isAxesHelper){x.geometry.dispose();x.material.dispose()}if(x.isLine){x.geometry.dispose();if(Array.isArray(x.material))x.material.forEach(m=>m.dispose());else x.material.dispose()}})}diagnosticObjects=[];sourceActor=referenceActor=null;sourceWrapper=referenceWrapper=realisticWrapper=null;diagnosticMixers=[];if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}realisticActor=null;groundDeathPose=false;realisticDeathPreview=null;for(const a of previewActors)if(a?.userData.body){a.userData.body.visible=true;a.userData.badge.visible=el('icons').checked}}
+function removeRealistic(){removeRiflemen();for(const mixer of [realisticMixer,referenceMixer,sourceMixer])mixer?.stopAllAction();realisticMixer=referenceMixer=sourceMixer=null;for(const o of diagnosticObjects){previewGroup.remove(o);o.traverse(x=>{if(x.isSprite){x.material.map?.dispose();x.material.dispose()}if(x.isAxesHelper){x.geometry.dispose();x.material.dispose()}if(x.isLine){x.geometry.dispose();if(Array.isArray(x.material))x.material.forEach(m=>m.dispose());else x.material.dispose()}})}diagnosticObjects=[];sourceActor=referenceActor=null;sourceWrapper=referenceWrapper=realisticWrapper=null;diagnosticMixers=[];if(rigHelper){previewGroup.remove(rigHelper);rigHelper.geometry.dispose();rigHelper.material.dispose();rigHelper=null}realisticActor=null;groundDeathPose=false;realisticDeathPreview=null;for(const a of previewActors)if(a?.userData.body){a.userData.body.visible=true;a.userData.badge.visible=el('icons').checked}}
 // Retarget in corresponding parent-rest frames, preserving the destination bind pose.
 const BONE_MAP={
  root:'_rootJoint',pelvis:'Hips_01',spine_01:'Spine_02',spine_02:'Spine1_03',spine_03:'Spine2_04',neck_01:'Neck_05',Head:'Head_06',
@@ -553,6 +555,7 @@ function loadAnimationLibrary(){
  animationLoading=true;
  realisticLoader.load('./assets/animations/UAL1_Standard.glb',g=>{
   animationLoading=false;animationSource=g;retargetCache.clear();
+  if(mode==='preview'&&el('riflemanPreview').checked)buildRiflemen();
   if(mode==='preview'&&el('realisticPreview').checked)attachRealistic();
  },undefined,e=>{animationLoading=false;console.warn('Animation library failed to load',e);status('Animation library could not load; celebration remains available')});
 }
@@ -602,6 +605,7 @@ function setupSourceComparison(selected,userScale){
 }
 function updatePoseDiagnostics(){if(!animationSource||!sourceActor||!referenceActor||!realisticActor)return;const lines=[];for(const [src,dst] of [['pelvis','Hips_01'],['spine_02','Spine1_03'],['spine_03','Spine2_04'],['neck_01','Neck_05'],['Head','Head_06'],['upperarm_l','LeftArm_035'],['thigh_l','LeftUpLeg_064']]){const s=sourceActor.getObjectByName(src),a=referenceActor.getObjectByName(src),b=realisticActor.getObjectByName(dst);if(!s||!a||!b)continue;const deg=o=>o.rotation.toArray().slice(0,3).map(v=>THREE.MathUtils.radToDeg(v).toFixed(0)).join('/');lines.push(src+' XYZ° source '+deg(s)+' / ref '+deg(a)+' / soldier '+deg(b))}el('rigPoseDiagnostics').textContent=lines.join(' | ')}
 function updateDiagnosticFrame(dt){
+ updateRiflemen(dt);
  if(!el('pauseRig').checked){for(const mixer of [sourceMixer,referenceMixer,realisticMixer])mixer?.update(dt)}
  else {const time=Number(el('rigFrame').value)/100;for(const mixer of [sourceMixer,referenceMixer,realisticMixer])if(mixer){mixer.setTime(time);mixer.update(0)}}
  groundRetargetedDeath();updateRealisticDeathPreview();
@@ -619,6 +623,7 @@ function groundRetargetedDeath(){
  if(Math.abs(correction)>.0001){realisticWrapper.position.y+=correction;realisticWrapper.updateWorldMatrix(true,true)}
 }
 function attachRealistic(){
+ if(el('riflemanPreview').checked){buildRiflemen();return;}
  removeRealistic();
  if(mode!=='preview'||!el('realisticPreview').checked||!realisticTemplate||!referenceTemplate||!animationSource)return;
  const proxy=previewActors[0];if(!proxy)return;const userScale=Number(el('soldierScale').value),visual=cloneSkeleton(realisticTemplate),soldierRig=normalizeRig(visual,1.5,userScale),scale=soldierRig.scale;realisticWrapper=soldierRig.wrapper;
@@ -647,10 +652,37 @@ for(const id of ['showSourceMesh','showSourceSkeleton','showReferenceMesh','show
 for(const id of ['showBoneLabels','showBoneAxes'])el(id).addEventListener('change',()=>{for(const update of diagnosticMixers)update()});
 el('realisticAnimation').addEventListener('change',()=>{if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
 el('soldierScale').addEventListener('input',()=>{const factor=Number(el('soldierScale').value);el('soldierScaleValue').textContent=Math.round(factor*100)+'% / '+(RIG_PREVIEW_HEIGHT*factor).toFixed(2)+'m';if(realisticTemplate&&el('realisticPreview').checked)attachRealistic()});
-el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').checked)loadRealistic();else{removeRealistic();previewBuild()}});
-el('pauseRig').addEventListener('change',()=>{if(el('pauseRig').checked)el('rigFrame').value=Math.round((realisticMixer?.time||0)*100)});
+el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').checked){el('riflemanPreview').checked=false;previewBuild();resetCamera();loadRealistic()}else{removeRealistic();previewBuild()}});
+el('pauseRig').addEventListener('change',()=>{if(el('pauseRig').checked)el('rigFrame').value=Math.round((riflemanMixers[0]?.time||realisticMixer?.time||0)*100)});
 el('rigFrame').addEventListener('input',()=>{el('pauseRig').checked=true;const t=Number(el('rigFrame').value)/100;for(const mixer of [sourceMixer,referenceMixer,realisticMixer])if(mixer){mixer.setTime(t);mixer.update(0)}updatePoseDiagnostics()});
-function previewBuild(){removeRealistic();previewActors.forEach(a=>{if(a)previewGroup.remove(a)});previewActors=[];[['whitePiece','whiteAnim','w',-1.5],['blackPiece','blackAnim','b',1.5]].forEach(([id,aid,color,x])=>{if(el(id).value==='none'){previewActors.push(null);return}const a=soldier(el(id).value,color);a.position.set(x,.12,0);a.rotation.y=color==='w'?Math.PI/2:-Math.PI/2;setState(a,el(aid).value);if(id==='blackPiece'&&el(aid).value==='dying')a.userData.deathStyle=deathStyleFor(el('whitePiece').value);previewGroup.add(a);previewActors.push(a)});if(el('realisticPreview').checked&&realisticTemplate)attachRealistic()}
+// Rifleman fitting studio: direct playback on the existing Quaternius skeleton.
+let riflemen=[],riflemanMixers=[];
+function removeRiflemen(){for(const m of riflemanMixers)m.stopAllAction();riflemanMixers=[];for(const a of riflemen){previewGroup.remove(a.wrapper);disposeRifleman(a.visual)}riflemen=[];}
+function buildRiflemen(){
+ if(mode!=='preview'||!el('riflemanPreview').checked||!referenceTemplate||!animationSource)return;
+ removeRiflemen();
+ const name=el('riflemanAnimation').value,clip=animationSource.animations.find(c=>c.name===name);
+ for(const [palette,x] of [['desert',-.60],['dark',.60]]){
+  const visual=createRifleman(referenceTemplate,palette);
+  calibrateRiflemanWeapon(visual,animationSource.animations.find(c=>c.name==='Pistol_Idle_Loop'));
+  const rig=normalizeRig(visual,x,1);
+  previewGroup.add(rig.wrapper);riflemen.push({visual,wrapper:rig.wrapper});
+  const mixer=new THREE.AnimationMixer(visual);if(clip)playSynced(mixer,clip,name);riflemanMixers.push(mixer);
+ }
+ status('Rifleman prototype • desert / dark • '+el('riflemanAnimation').selectedOptions[0].textContent);
+}
+function loadRiflemen(){
+ if(!referenceTemplate&&!referenceLoading){referenceLoading=true;realisticLoader.load('./assets/reference/scene.gltf',g=>{referenceLoading=false;referenceTemplate=g.scene;buildRiflemen()},undefined,e=>{referenceLoading=false;status('Rifleman reference failed to load');console.warn(e)})}
+ loadAnimationLibrary();buildRiflemen();
+}
+function updateRiflemen(dt){
+ for(const mixer of riflemanMixers){if(el('pauseRig').checked){mixer.setTime(Number(el('rigFrame').value)/100);mixer.update(0)}else mixer.update(dt)}
+ if(el('riflemanAnimation').value.startsWith('Pistol_'))for(const {visual} of riflemen)updateRiflemanGrip(visual);
+}
+el('riflemanPreview').addEventListener('change',()=>{if(el('riflemanPreview').checked)el('realisticPreview').checked=false;previewBuild();resetCamera()});
+el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').checked){el('riflemanPreview').checked=false;removeRiflemen()}});
+el('riflemanAnimation').addEventListener('change',buildRiflemen);
+function previewBuild(){if(el('riflemanPreview').checked){el('testAttack').disabled=true;for(const a of previewActors)if(a)previewGroup.remove(a);previewActors=[];removeRealistic();loadRiflemen();return;}el('testAttack').disabled=false;removeRealistic();previewActors.forEach(a=>{if(a)previewGroup.remove(a)});previewActors=[];[['whitePiece','whiteAnim','w',-1.5],['blackPiece','blackAnim','b',1.5]].forEach(([id,aid,color,x])=>{if(el(id).value==='none'){previewActors.push(null);return}const a=soldier(el(id).value,color);a.position.set(x,.12,0);a.rotation.y=color==='w'?Math.PI/2:-Math.PI/2;setState(a,el(aid).value);if(id==='blackPiece'&&el(aid).value==='dying')a.userData.deathStyle=deathStyleFor(el('whitePiece').value);previewGroup.add(a);previewActors.push(a)});if(el('realisticPreview').checked&&realisticTemplate)attachRealistic()}
 function setMode(next){mode=next;boardGroup.visible=next==='battle';previewGroup.visible=next==='preview';alpineSurroundings.visible=next==='battle'&&el('environmentSelect').value==='highlands';horizonGroup.visible=next==='battle'&&el('environmentSelect').value==='highlands';el('battleControls').classList.toggle('hide',next!=='battle');el('previewControls').classList.toggle('hide',next!=='preview');el('battleBtn').classList.toggle('primary',next==='battle');el('previewBtn').classList.toggle('primary',next==='preview');if(next==='preview'){previewBuild();status('Animation preview studio');if(el('realisticPreview').checked)loadRealistic()}else{removeRealistic();status('Select a piece to move')};resetCamera()}
 for(const [id,initial] of [['whitePiece','p'],['blackPiece','q']]){if(id==='blackPiece'){const none=document.createElement('option');none.value='none';none.textContent='None (hide black piece)';el(id).append(none)}for(const [key,name] of Object.entries(TYPES)){const o=document.createElement('option');o.value=key;o.textContent=`${SYMBOL[id==='whitePiece'?'w':'b'][key]} ${name}`;el(id).append(o)}el(id).value=initial;el(id).addEventListener('change',previewBuild)}for(const id of ['whiteAnim','blackAnim']){for(const name of ANIMS){const o=document.createElement('option');o.value=name;o.textContent=name[0].toUpperCase()+name.slice(1);el(id).append(o)}el(id).value=id==='blackAnim'?'targeted':'idle';el(id).addEventListener('change',previewBuild)}
 el('battleBtn').onclick=()=>setMode('battle');el('previewBtn').onclick=()=>setMode('preview');el('cameraBtn').onclick=resetCamera;el('previewCamera').onclick=resetCamera;el('resetBtn').onclick=()=>{if(busy)return;game.reset();syncBoard();clearHighlights();selected=null;setMode('battle');status('New game ready')};el('undoBtn').onclick=()=>{if(busy)return;game.undo();syncBoard();clearHighlights();selected=null;status('Last move undone')};el('icons').onchange=()=>{for(const a of [...actors.values(),...previewActors])if(a)a.userData.badge.visible=el('icons').checked};el('testAttack').onclick=async()=>{if(busy)return;busy=true;const panel=document.getElementById('ui');if(!panel.classList.contains('collapsed'))document.getElementById('uiToggle').click();await wait(250);const [a,b]=previewActors;if(!a||!b){status('Select a black piece to test an attack');busy=false;return}setState(a,'highlighted');setState(b,'targeted');status('Preview: acquiring target');await cameraFocus(a,b);setState(a,'attacking');await wait(850);await effect(a,b,a.userData.type);b.userData.deathStyle=deathStyleFor(a.userData.type);startRealisticDeathPreview(b.userData.deathStyle,a.userData.type==='n'?1.45:1.55);setState(b,'dying');await wait(a.userData.type==='n'?1450:a.userData.type==='r'?1550:1250);previewBuild();resetCamera();status('Preview attack complete');busy=false};
