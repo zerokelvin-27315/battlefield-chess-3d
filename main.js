@@ -131,7 +131,7 @@ borderOuter.forEach(([x,y],i)=>i?borderShape.lineTo(x,y):borderShape.moveTo(x,y)
 const borderOpening=new THREE.Path();const openingHalf=4.02;
 borderOpening.moveTo(-openingHalf,-openingHalf);borderOpening.lineTo(-openingHalf,openingHalf);borderOpening.lineTo(openingHalf,openingHalf);borderOpening.lineTo(openingHalf,-openingHalf);borderOpening.closePath();borderShape.holes.push(borderOpening);
 // One atlas: transparent cap frame in the left half, generated side-face tile in the right half.
-const weatheredBorderTexture=new THREE.TextureLoader().load('./assets/weathered-peak-border-atlas.png?v=0.8.1',()=>{weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.needsUpdate=true;},undefined,()=>console.warn('Weathered Peak border atlas missing: rebuild assets/weathered-peak-border-atlas.png.'));
+const weatheredBorderTexture=new THREE.TextureLoader().load('./assets/weathered-peak-border-atlas.png?v=0.8.2',()=>{weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.needsUpdate=true;},undefined,()=>console.warn('Weathered Peak border atlas missing: rebuild assets/weathered-peak-border-atlas.png.'));
 weatheredBorderTexture.colorSpace=THREE.SRGBColorSpace;weatheredBorderTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 const weatheredRimGeometry=new THREE.ExtrudeGeometry(borderShape,{depth:.18,steps:1,bevelEnabled:true,bevelSegments:2,bevelThickness:.022,bevelSize:.018});
 // ExtrudeGeometry is non-indexed: group 0 is both horizontal caps; group 1 is vertical sidewalls.
