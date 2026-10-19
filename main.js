@@ -216,6 +216,7 @@ for(let i=0;i<85;i++){
 }
 // Alpine Valley scenery, independent of the canonical playable board.
 const alpineSurroundings=new THREE.Group();scene.add(alpineSurroundings);
+const occludingMountains=[];
 const valleyMats={
  cliff:material('#716e67'),cliffLight:material('#969084'),forest:material('#344d3e'),
  pine:material('#405c47'),pineLight:material('#607051'),trunk:material('#54483a'),
@@ -309,7 +310,9 @@ function mountainMass(cx,cz,radius,height,mat){
   faces.push(a,b,c,b,d,c);
  }
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));g.setIndex(faces);g.computeVertexNormals();
- const mesh=new THREE.Mesh(g,mat);mesh.receiveShadow=true;alpineSurroundings.add(mesh);
+ const mountainMaterial=mat.clone();
+ const mesh=new THREE.Mesh(g,mountainMaterial);mesh.receiveShadow=true;alpineSurroundings.add(mesh);
+ occludingMountains.push({mesh,cx,cz,radius,height,baseY:valleyHeight(cx,cz),opacity:1,targetOpacity:1});
 }
 mountainMass(-25,-23,16,18,massifMats[1]);
 mountainMass(-41,-12,19,25,massifMats[0]);
@@ -441,7 +444,34 @@ function setState(actor,state){if(!actor)return;actor.userData.state=state;actor
 function syncBoard(){for(const a of actors.values())boardGroup.remove(a);actors.clear();for(let r=0;r<8;r++)for(let f=0;f<8;f++){const sq=String.fromCharCode(97+f)+(r+1),piece=game.get(sq);if(!piece)continue;const a=soldier(piece.type,piece.color),p=squareToWorld(sq);a.position.set(p.x,.12,p.z);a.rotation.y=piece.color==='w'?Math.PI:0;boardGroup.add(a);actors.set(sq,a)}updateTurn()}
 function updateTurn(){const turn=game.turn()==='w'?'White':'Black';el('turn').textContent=game.isCheckmate()?`Checkmate! ${turn==='White'?'Black':'White'} wins`:game.isDraw()?'Draw':`${turn} to move${game.isCheck()?' • CHECK':''}`}
 function chooseSquare(sq){if(busy||mode!=='battle'||game.isGameOver())return;const piece=game.get(sq);if(selected&&legal.includes(sq)){performMove(selected,sq);return}clearHighlights();for(const a of actors.values())setState(a,'idle');if(piece&&piece.color===game.turn()){selected=sq;legal=game.moves({square:sq,verbose:true}).map(m=>m.to);mark(sq,0x4fb3dc);legal.forEach(s=>mark(s,game.get(s)?0xff684f:0x58cc98));setState(actors.get(sq),'highlighted');status(`${TYPES[piece.type]} selected • ${legal.length} legal moves`)}else{selected=null;legal=[];status('Select a friendly piece')}}
-const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointerStart=null;renderer.domElement.addEventListener('pointerdown',e=>pointerStart={x:e.clientX,y:e.clientY});renderer.domElement.addEventListener('pointerup',e=>{if(!pointerStart||Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>7)return;pointerStart=null;if(mode!=='battle')return;mouse.set(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1);raycaster.setFromCamera(mouse,camera);const hits=raycaster.intersectObjects(el('environmentSelect').value==='highlands'?highlandTiles:tileMeshes);if(hits.length)chooseSquare(hits[0].object.userData.square)});
+const raycaster=new THREE.Raycaster(),mountainOcclusionRaycaster=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointerStart=null;renderer.domElement.addEventListener('pointerdown',e=>pointerStart={x:e.clientX,y:e.clientY});renderer.domElement.addEventListener('pointerup',e=>{if(!pointerStart||Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>7)return;pointerStart=null;if(mode!=='battle')return;mouse.set(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1);raycaster.setFromCamera(mouse,camera);const hits=raycaster.intersectObjects(el('environmentSelect').value==='highlands'?highlandTiles:tileMeshes);if(hits.length)chooseSquare(hits[0].object.userData.square)});
+const mountainViewTargets=[-3.6,0,3.6].flatMap(x=>[-3.6,0,3.6].map(z=>new THREE.Vector3(x,HIGHLANDS_BOARD_ELEVATION+.12,z)));
+let mountainOcclusionTimer=0;
+function updateMountainOcclusion(dt){
+ const enabled=mode==='battle'&&el('environmentSelect').value==='highlands'&&alpineSurroundings.visible;
+ mountainOcclusionTimer-=dt;
+ if(enabled&&mountainOcclusionTimer<=0){
+  mountainOcclusionTimer=.1;
+  for(const mountain of occludingMountains){
+   const {mesh,cx,cz,radius,height,baseY}=mountain;
+   const dx=camera.position.x-cx,dz=camera.position.z-cz,radialDistance=Math.hypot(dx,dz);
+   const t=Math.max(0,1-radialDistance/radius),roof=baseY+height*t*t*(3-2*t);
+   let blocksBoard=camera.position.y>baseY+.15&&camera.position.y<roof-.1;
+   if(!blocksBoard)for(const target of mountainViewTargets){
+    const direction=target.clone().sub(camera.position),distance=direction.length();
+    mountainOcclusionRaycaster.set(camera.position,direction.normalize());mountainOcclusionRaycaster.far=Math.max(0,distance-.18);
+    if(mountainOcclusionRaycaster.intersectObject(mesh,false).length){blocksBoard=true;break}
+   }
+   mountain.targetOpacity=blocksBoard ? .12 : 1;
+  }
+ }else if(!enabled){for(const mountain of occludingMountains)mountain.targetOpacity=1}
+ for(const mountain of occludingMountains){
+  mountain.opacity=THREE.MathUtils.damp(mountain.opacity,mountain.targetOpacity,7,dt);
+  const material=mountain.mesh.material,transparent=mountain.opacity<.995;
+  if(material.transparent!==transparent||material.depthWrite===transparent){material.transparent=transparent;material.depthWrite=!transparent;material.needsUpdate=true}
+  material.opacity=mountain.opacity;
+ }
+}
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}function tween(duration,fn){return new Promise(resolve=>{const start=performance.now();function tick(t){const k=Math.min(1,(t-start)/duration);fn(k);if(k<1)requestAnimationFrame(tick);else resolve()}requestAnimationFrame(tick)})}
 async function cameraFocus(attacker,defender){const attackerWorld=attacker.getWorldPosition(new THREE.Vector3()),defenderWorld=defender.getWorldPosition(new THREE.Vector3());const center=attackerWorld.clone().add(defenderWorld).multiplyScalar(.5);center.y+=1;const separation=attackerWorld.distanceTo(defenderWorld);const aspect=camera.aspect;const verticalFov=THREE.MathUtils.degToRad(camera.fov);const horizontalFov=2*Math.atan(Math.tan(verticalFov/2)*aspect);const limitingFov=Math.min(verticalFov,horizontalFov);const radius=Math.max(2.7,separation*.65+1.1);const distance=Math.max(10,(radius/Math.sin(limitingFov/2))*1.2);const side=new THREE.Vector3(1,.65,1).normalize();const to=center.clone().addScaledVector(side,distance);const from=camera.position.clone(),targetFrom=controls.target.clone();await tween(700,k=>{const t=k*k*(3-2*k);camera.position.lerpVectors(from,to,t);controls.target.lerpVectors(targetFrom,center,t);controls.update()})}
 // Lightweight, role-specific visual combat effects. All effects use Three.js primitives.
@@ -670,7 +700,7 @@ if(mode==='preview'&&w>2.8)setState(a,'dying');
 }
 u.badge.visible=el('icons').checked&&!(a===previewActors[0]&&realisticActor);
 }
-controls.update();renderer.render(scene,camera);
+controls.update();updateMountainOcclusion(dt);renderer.render(scene,camera);
 }
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});syncBoard();setMode('battle');animate();
 

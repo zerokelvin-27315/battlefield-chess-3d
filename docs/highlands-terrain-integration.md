@@ -14,3 +14,7 @@ When changing the elevation, keep the following in sync:
 The island cliff is one closed perimeter mesh with four sides and shared corner vertices. Each perimeter sample has several descending bands, with increasing outward offsets toward the base. This connects the adjacent faces at every corner and avoids the gaps left by four independent side strips. Keep the perimeter sample loop closed (`next = (j + 1) % cliffLoopSteps`) when changing its resolution.
 
 The valley ground grid includes every cell beneath the island. If the cliff footprint or elevation changes, inspect the board from below and at a low three-quarter angle to confirm that the terrain intersects the lower skirt and no corner openings have returned. The river mesh was removed to keep the valley floor continuous and uncluttered around the embedded island.
+
+## Mountain camera occlusion
+
+The four distant mountain masses are tracked independently. During Highlands battle mode, nine rays are sampled from the camera to a 3×3 set of points across the playable board every 100 ms. Any mountain that intersects a sampled view ray fades smoothly to 12% opacity; it returns to opaque when the board is clear. A radial height estimate also detects when the camera enters a mountain mass, including cases where a ray starting inside the mesh would not hit its front face. Per-mountain cloned materials keep the fade isolated from other scenery. Keep the ray target points aligned with the board footprint if its dimensions change.
