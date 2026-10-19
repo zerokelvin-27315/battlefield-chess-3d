@@ -13,6 +13,17 @@ Implementation notes for the raised frame in `main.js` and atlas assets.
 
 The playable board keeps using `assets/weathered-peak-board.png`; it is a separate, approved surface texture. Do not fold the board surface into this atlas or modify it while adjusting the frame.
 
+## Atlas lessons
+
+Use atlasing where it fits the material and UV workflow. Combining related frame images into one texture reduces texture loads and keeps cap and side assets versioned together. Keep unrelated assets, such as the approved playable board surface, separate when they have different ownership, update cadence, or mapping needs.
+
+- Record each atlas cell's pixel rectangle and its normalized UV rectangle in one place. Keep runtime UV constants in sync with the atlas builder.
+- Give each cell a gutter made by extending its edge texels. This protects mip levels and filtered samples from neighboring cells; transparent gaps alone do not prevent color bleed.
+- Constrain atlas sampling to the intended cell. The side shader remaps its local repeat coordinates into the side rectangle rather than letting repeat wrap across the whole atlas.
+- Preserve source aspect ratios and choose UV scale from world dimensions. Do not stretch a tile to fit a long wall; repeat it along the wall instead.
+- Keep generated source tiles alongside the atlas and provide a reproducible build script. Validate the decoded output dimensions, color mode, and transparency after rebuilding.
+- If alternating tiles are mirrored to hide a repeat seam, check that the stone direction and lighting still look natural on both orientations.
+
 ## Three.js `ExtrudeGeometry` groups
 
 For Three.js `0.169.0`, the frame geometry is non-indexed (`geometry.index === null`):
@@ -45,6 +56,16 @@ Read `geometry.attributes.normal` for each group-1 vertex in local Shape/extrusi
 Divide that coordinate by the side tile's world repeat length (2.25m). Set V from extrusion Z across the full beveled height (`depth + 2 * bevelThickness`). After rotation, V is world-up on all four sides. This keeps stones upright and consistent when the face normal changes around the frame.
 
 The side material shader remaps the fractional UV into the atlas side cell. It mirrors alternate U tiles (`floor(U)` parity) so the generated texture can repeat seamlessly even though its left and right source edges differ. Keep the atlas side rectangle and UV constants synchronized with the atlas builder's cell positions.
+
+## Verification checklist
+
+When changing atlas assets or mapping code, verify each stage independently:
+
+1. Decode every PNG fully and inspect alpha; a valid file header does not guarantee valid image data or a transparent center.
+2. Confirm the actual geometry's index state and material groups for the installed Three.js version. `ExtrudeGeometry` here is non-indexed, so process group vertices directly.
+3. Check cap and side UVs separately. Confirm cap UVs land in the cap cell, and inspect side normals on all four directions to ensure U follows each wall and V remains upright after mesh rotation.
+4. Run the app and inspect top-down, three-quarter, and mobile-sized views. Look for missing caps, cell bleed, seams, mirrored-looking lighting, stretching, or frame overlap with playable squares.
+5. Confirm the browser loaded the current atlas after deployment. Update the URL cache query when replacing the image, then check the live page for successful texture loading.
 
 ## Asset validation and cache
 

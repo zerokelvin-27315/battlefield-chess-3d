@@ -9,14 +9,15 @@ const SYMBOL={w:{p:'♙',r:'♖',n:'♘',b:'♗',q:'♕',k:'♔'},b:{p:'♟',r:'
 const ANIMS=['idle','highlighted','targeted','moving','attacking','dying'];
 const el=id=>document.getElementById(id), status=s=>el('status').textContent=s;
 const scene=new THREE.Scene();scene.background=new THREE.Color('#111c25');scene.fog=new THREE.Fog('#111c25',22,49);
-const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,120);camera.position.set(10,15,16);
+const HIGHLANDS_BOARD_ELEVATION=-4.8;
+const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,120);camera.position.set(10,15+HIGHLANDS_BOARD_ELEVATION,16);
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;el('view').appendChild(renderer.domElement);
-const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.maxPolarAngle=Math.PI/2.07;controls.minDistance=5;controls.maxDistance=32;controls.target.set(0,0,0);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.maxPolarAngle=Math.PI/2.07;controls.minDistance=5;controls.maxDistance=32;controls.target.set(0,HIGHLANDS_BOARD_ELEVATION,0);
 scene.add(new THREE.HemisphereLight(0xbed9f0,0x353021,2.0));const sun=new THREE.DirectionalLight(0xffe7c6,2.5);sun.position.set(-12,12,-18);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-15;sun.shadow.camera.right=15;sun.shadow.camera.top=15;sun.shadow.camera.bottom=-15;scene.add(sun);
 const material=(color,metalness=0)=>new THREE.MeshStandardMaterial({color,roughness:.82,metalness});
 const mats={rock:material('#4b4a42'),light:material('#747369'),dark:material('#444a46'),white:material('#b3b39f'),black:material('#334553'),weapon:material('#20252a',.45),skin:material('#b88d72'),glow:material('#e6b767')};
 const box=(w,h,d,mat)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat),ball=(r,mat)=>new THREE.Mesh(new THREE.SphereGeometry(r,10,8),mat);
-const boardGroup=new THREE.Group(),previewGroup=new THREE.Group();scene.add(boardGroup,previewGroup);const squareToWorld=s=>({x:s.charCodeAt(0)-97-3.5,z:3.5-(+s[1]-1)});
+const boardGroup=new THREE.Group(),previewGroup=new THREE.Group();boardGroup.position.y=HIGHLANDS_BOARD_ELEVATION;scene.add(boardGroup,previewGroup);const squareToWorld=s=>({x:s.charCodeAt(0)-97-3.5,z:3.5-(+s[1]-1)});
 const terrain=box(12,.5,12,mats.rock);terrain.position.y=-.34;terrain.receiveShadow=true;boardGroup.add(terrain);
 const tileMeshes=[];for(let rank=0;rank<8;rank++)for(let file=0;file<8;file++){const sq=String.fromCharCode(97+file)+(rank+1),p=squareToWorld(sq);const tile=box(.97,.08,.97,(rank+file)%2?mats.dark:mats.light);tile.position.set(p.x,.0,p.z);tile.receiveShadow=true;tile.userData.square=sq;boardGroup.add(tile);tileMeshes.push(tile)}
 let seed=42;function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}
@@ -241,29 +242,34 @@ function valleyHeight(x,z){
  const near=Math.max(0,1-Math.max(0,d-6)/7);
  return valley-near*.6;
 }
-// Narrow, broken cliff transition rather than a giant smooth rectangular pedestal.
+// Continuous closed cliff loop: shared corner vertices prevent gaps between the four faces.
 const shoulderMaterial=new THREE.MeshStandardMaterial({color:'#69665f',roughness:1,flatShading:true,side:THREE.DoubleSide});
-const cliffBands=[0,-.4,-1.15,-2.25,-3.6];
-for(let side=0;side<4;side++){
- const verts=[],idx=[],steps=32;
- for(let j=0;j<=steps;j++){
-  const t=j/steps,along=-4.22+t*8.44;
-  for(let k=0;k<cliffBands.length;k++){
-   const d=[4.03,4.27,4.65,5.15,5.85][k]+Math.sin(t*27+side*5+k*1.9)*(.035+k*.085);
-   const x=side<2?along:(side===2?-d:d);
-   const z=side<2?(side===0?-d:d):along;
-   const y=cliffBands[k]+Math.sin(t*17+side*2+k)*(.04+k*.12);
-   verts.push(x,y,z);
-  }
-  if(j<steps){const a=j*cliffBands.length;for(let k=0;k<cliffBands.length-1;k++){
-   if((j+k)%2)idx.push(a+k,a+k+cliffBands.length,a+k+1,a+k+1,a+k+cliffBands.length,a+k+cliffBands.length+1);
-   else idx.push(a+k,a+k+cliffBands.length,a+k+cliffBands.length+1,a+k,a+k+cliffBands.length+1,a+k+1);
-  }}
+const cliffBands=[0,-.4,-1.15,-2.25,-3.6],cliffOffsets=[0,.24,.62,1.12,1.82];
+const cliffStepsPerSide=32,cliffLoopSteps=cliffStepsPerSide*4,cliffVertices=[],cliffIndices=[];
+for(let side=0;side<4;side++)for(let j=0;j<cliffStepsPerSide;j++){
+ const t=j/cliffStepsPerSide,along=-4.22+t*8.44,loopIndex=side*cliffStepsPerSide+j;
+ for(let k=0;k<cliffBands.length;k++){
+  const offset=cliffOffsets[k]+Math.sin(loopIndex*1.31+k*1.9)*(.035+k*.085);
+  const corner=j===0;
+  let x,z;
+  if(side===0){x=along-(corner?offset:0);z=-4.22-offset}
+  else if(side===1){x=4.22+offset;z=along-(corner?offset:0)}
+  else if(side===2){x=-along+(corner?offset:0);z=4.22+offset}
+  else{x=-4.22-offset;z=-along+(corner?offset:0)}
+  const y=cliffBands[k]+Math.sin(loopIndex*.42+k*1.7)*(.04+k*.12);
+  cliffVertices.push(x,y,z);
  }
- const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));g.setIndex(idx);g.computeVertexNormals();
- const cliff=new THREE.Mesh(g,shoulderMaterial);cliff.receiveShadow=true;alpineSurroundings.add(cliff);
 }
-// Terrain has a central opening: scenery never overlaps the chessboard.
+for(let j=0;j<cliffLoopSteps;j++){
+ const next=(j+1)%cliffLoopSteps,a=j*cliffBands.length,b=next*cliffBands.length;
+ for(let k=0;k<cliffBands.length-1;k++){
+  if((j+k)%2)cliffIndices.push(a+k,b+k,a+k+1,a+k+1,b+k,b+k+1);
+  else cliffIndices.push(a+k,b+k,b+k+1,a+k,b+k+1,a+k+1);
+ }
+}
+const cliffGeometry=new THREE.BufferGeometry();cliffGeometry.setAttribute('position',new THREE.Float32BufferAttribute(cliffVertices,3));cliffGeometry.setIndex(cliffIndices);cliffGeometry.computeVertexNormals();
+const cliffMesh=new THREE.Mesh(cliffGeometry,shoulderMaterial);cliffMesh.position.y=HIGHLANDS_BOARD_ELEVATION;cliffMesh.receiveShadow=true;alpineSurroundings.add(cliffMesh);
+// The terrain begins just outside the cliff footprint so its surface intersects the lowered rock skirt.
 const valleyPositions=[],valleyIndices=[],valleyN=70,valleySpan=100;
 for(let iz=0;iz<=valleyN;iz++)for(let ix=0;ix<=valleyN;ix++){
  const x=(ix/valleyN-.5)*valleySpan,z=(iz/valleyN-.5)*valleySpan;
@@ -272,7 +278,7 @@ for(let iz=0;iz<=valleyN;iz++)for(let ix=0;ix<=valleyN;ix++){
 }
 for(let iz=0;iz<valleyN;iz++)for(let ix=0;ix<valleyN;ix++){
  const cx=(ix+.5)/valleyN*valleySpan-valleySpan/2,cz=(iz+.5)/valleyN*valleySpan-valleySpan/2;
- if(Math.abs(cx)<6.5&&Math.abs(cz)<6.5)continue;
+ if(Math.abs(cx)<5.3&&Math.abs(cz)<5.3)continue;
  const a=iz*(valleyN+1)+ix,b=a+1,c=a+valleyN+1,d=c+1;
  valleyIndices.push(a,c,b,b,c,d);
 }
@@ -393,6 +399,7 @@ function setSkybox(id){
 }
 function setEnvironment(id){
  const chosen=ENVIRONMENTS[id]||ENVIRONMENTS.classic;
+ boardGroup.position.y=id==='highlands'?HIGHLANDS_BOARD_ELEVATION:0;
  classicTerrain.visible=id==='classic';highlandsTerrain.visible=id==='highlands';horizonGroup.visible=id==='highlands';alpineSurroundings.visible=id==='highlands';
  el('environmentSelect').value=id;
  setSkybox(el('skyboxSelect').value);
@@ -401,7 +408,7 @@ function initializeEnvironmentUI(){
  const boardSelect=el('environmentSelect'),skySelect=el('skyboxSelect');
  for(const [id,preset] of Object.entries(ENVIRONMENTS))boardSelect.add(new Option(preset.name,id));
  for(const [id,preset] of Object.entries(SKYBOXES))skySelect.add(new Option(preset.name,id));
- boardSelect.addEventListener('change',()=>{skySelect.value=ENVIRONMENTS[boardSelect.value].sky;setEnvironment(boardSelect.value)});
+ boardSelect.addEventListener('change',()=>{skySelect.value=ENVIRONMENTS[boardSelect.value].sky;setEnvironment(boardSelect.value);resetCamera()});
  skySelect.addEventListener('change',()=>setSkybox(skySelect.value));
  boardSelect.value='highlands';skySelect.value='sunset';setEnvironment('highlands');
 }
@@ -447,11 +454,12 @@ function updateTurn(){const turn=game.turn()==='w'?'White':'Black';el('turn').te
 function chooseSquare(sq){if(busy||mode!=='battle'||game.isGameOver())return;const piece=game.get(sq);if(selected&&legal.includes(sq)){performMove(selected,sq);return}clearHighlights();for(const a of actors.values())setState(a,'idle');if(piece&&piece.color===game.turn()){selected=sq;legal=game.moves({square:sq,verbose:true}).map(m=>m.to);mark(sq,0x4fb3dc);legal.forEach(s=>mark(s,game.get(s)?0xff684f:0x58cc98));setState(actors.get(sq),'highlighted');status(`${TYPES[piece.type]} selected • ${legal.length} legal moves`)}else{selected=null;legal=[];status('Select a friendly piece')}}
 const raycaster=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointerStart=null;renderer.domElement.addEventListener('pointerdown',e=>pointerStart={x:e.clientX,y:e.clientY});renderer.domElement.addEventListener('pointerup',e=>{if(!pointerStart||Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>7)return;pointerStart=null;if(mode!=='battle')return;mouse.set(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1);raycaster.setFromCamera(mouse,camera);const hits=raycaster.intersectObjects(el('environmentSelect').value==='highlands'?highlandTiles:tileMeshes);if(hits.length)chooseSquare(hits[0].object.userData.square)});
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}function tween(duration,fn){return new Promise(resolve=>{const start=performance.now();function tick(t){const k=Math.min(1,(t-start)/duration);fn(k);if(k<1)requestAnimationFrame(tick);else resolve()}requestAnimationFrame(tick)})}
-async function cameraFocus(attacker,defender){const center=attacker.position.clone().add(defender.position).multiplyScalar(.5);center.y=1;const separation=attacker.position.distanceTo(defender.position);const aspect=camera.aspect;const verticalFov=THREE.MathUtils.degToRad(camera.fov);const horizontalFov=2*Math.atan(Math.tan(verticalFov/2)*aspect);const limitingFov=Math.min(verticalFov,horizontalFov);const radius=Math.max(2.7,separation*.65+1.1);const distance=Math.max(10,(radius/Math.sin(limitingFov/2))*1.2);const side=new THREE.Vector3(1,.65,1).normalize();const to=center.clone().addScaledVector(side,distance);const from=camera.position.clone(),targetFrom=controls.target.clone();await tween(700,k=>{const t=k*k*(3-2*k);camera.position.lerpVectors(from,to,t);controls.target.lerpVectors(targetFrom,center,t);controls.update()})}
+async function cameraFocus(attacker,defender){const attackerWorld=attacker.getWorldPosition(new THREE.Vector3()),defenderWorld=defender.getWorldPosition(new THREE.Vector3());const center=attackerWorld.clone().add(defenderWorld).multiplyScalar(.5);center.y+=1;const separation=attackerWorld.distanceTo(defenderWorld);const aspect=camera.aspect;const verticalFov=THREE.MathUtils.degToRad(camera.fov);const horizontalFov=2*Math.atan(Math.tan(verticalFov/2)*aspect);const limitingFov=Math.min(verticalFov,horizontalFov);const radius=Math.max(2.7,separation*.65+1.1);const distance=Math.max(10,(radius/Math.sin(limitingFov/2))*1.2);const side=new THREE.Vector3(1,.65,1).normalize();const to=center.clone().addScaledVector(side,distance);const from=camera.position.clone(),targetFrom=controls.target.clone();await tween(700,k=>{const t=k*k*(3-2*k);camera.position.lerpVectors(from,to,t);controls.target.lerpVectors(targetFrom,center,t);controls.update()})}
 // Lightweight, role-specific visual combat effects. All effects use Three.js primitives.
 async function effect(from,to,type,fromSquare=null,toSquare=null){
-const origin=from.position.clone().add(new THREE.Vector3(0,1.2,.32).applyAxisAngle(new THREE.Vector3(0,1,0),from.rotation.y));
-const target=to.position.clone().add(new THREE.Vector3(0,1.02,0));
+const boardBaseY=mode==='battle'?boardGroup.position.y:0;
+const origin=from.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,1.2,.32).applyAxisAngle(new THREE.Vector3(0,1,0),from.rotation.y));
+const target=to.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,1.02,0));
 const disposable=[];
 function spawn(geometry,material){const mesh=new THREE.Mesh(geometry,material);scene.add(mesh);disposable.push(mesh);return mesh}
 function cleanup(){for(const m of disposable){scene.remove(m);m.geometry.dispose();m.material.dispose()}}
@@ -461,12 +469,12 @@ async function blast(at,radius=1){const core=flash(at,0xffa333,.2);const shock=s
 try{
 if(type==='r'){
 status('Radio operator: napalm strike across the lane!');
-const vectorAtSquare=s=>{const p=squareToWorld(s);return new THREE.Vector3(p.x,0,p.z)};let cells=[];if(fromSquare&&toSquare){const df=Math.sign(toSquare.charCodeAt(0)-fromSquare.charCodeAt(0)),dr=Math.sign(Number(toSquare[1])-Number(fromSquare[1]));const endFile=toSquare.charCodeAt(0)-97,endRank=Number(toSquare[1]);let file=fromSquare.charCodeAt(0)-97+df,rank=Number(fromSquare[1])+dr;while(file!==endFile||rank!==endRank){cells.push(vectorAtSquare(String.fromCharCode(97+file)+(rank)));file+=df;rank+=dr}cells.push(vectorAtSquare(toSquare))}else{for(let i=1;i<=6;i++)cells.push(from.position.clone().lerp(to.position,i/6))}
-const fire=[];for(const point of cells){const ground=point.clone();ground.y=.065;const ring=spawn(new THREE.CircleGeometry(.4,20),new THREE.MeshBasicMaterial({color:0xff6a16,transparent:true,opacity:.68,depthWrite:false,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.copy(ground);fire.push(ring);for(let j=0;j<3;j++){const flame=spawn(new THREE.ConeGeometry(.13-j*.02,.48+j*.08,7),new THREE.MeshBasicMaterial({color:j===0?0xffdd63:j===1?0xff741b:0xd72d12,transparent:true,opacity:.83,depthWrite:false}));flame.position.set(ground.x+(Math.random()-.5)*.2,.27+j*.07,ground.z+(Math.random()-.5)*.2);fire.push(flame)}}
-await tween(1700,k=>{fire.forEach((flame,i)=>{if(i%4===0){flame.material.opacity=.68*(1-k*.55);flame.scale.setScalar(1+k*.3)}else{flame.scale.y=.45+.48*(1-k*.55)+Math.sin(performance.now()*.018+i)*.08;flame.material.opacity=.85*(1-k*.55)}})});await blast(target.clone().setY(.08),.65)
+const vectorAtSquare=s=>{const p=squareToWorld(s);return boardGroup.localToWorld(new THREE.Vector3(p.x,.065,p.z))};let cells=[];if(fromSquare&&toSquare){const df=Math.sign(toSquare.charCodeAt(0)-fromSquare.charCodeAt(0)),dr=Math.sign(Number(toSquare[1])-Number(fromSquare[1]));const endFile=toSquare.charCodeAt(0)-97,endRank=Number(toSquare[1]);let file=fromSquare.charCodeAt(0)-97+df,rank=Number(fromSquare[1])+dr;while(file!==endFile||rank!==endRank){cells.push(vectorAtSquare(String.fromCharCode(97+file)+(rank)));file+=df;rank+=dr}cells.push(vectorAtSquare(toSquare))}else{const fromWorld=from.getWorldPosition(new THREE.Vector3()),toWorld=to.getWorldPosition(new THREE.Vector3());for(let i=1;i<=6;i++)cells.push(fromWorld.clone().lerp(toWorld,i/6))}
+const fire=[];for(const point of cells){const ground=point.clone();ground.y=boardBaseY+.065;const ring=spawn(new THREE.CircleGeometry(.4,20),new THREE.MeshBasicMaterial({color:0xff6a16,transparent:true,opacity:.68,depthWrite:false,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.copy(ground);fire.push(ring);for(let j=0;j<3;j++){const flame=spawn(new THREE.ConeGeometry(.13-j*.02,.48+j*.08,7),new THREE.MeshBasicMaterial({color:j===0?0xffdd63:j===1?0xff741b:0xd72d12,transparent:true,opacity:.83,depthWrite:false}));flame.position.set(ground.x+(Math.random()-.5)*.2,boardBaseY+.27+j*.07,ground.z+(Math.random()-.5)*.2);fire.push(flame)}}
+await tween(1700,k=>{fire.forEach((flame,i)=>{if(i%4===0){flame.material.opacity=.68*(1-k*.55);flame.scale.setScalar(1+k*.3)}else{flame.scale.y=.45+.48*(1-k*.55)+Math.sin(performance.now()*.018+i)*.08;flame.material.opacity=.85*(1-k*.55)}})});await blast(target.clone().setY(boardBaseY+.08),.65)
 }else if(type==='n'){
 status('Grenadier: grenade away!');
-const groundTarget=to.position.clone().setY(.07);const grenade=spawn(new THREE.SphereGeometry(.13,12,10),new THREE.MeshStandardMaterial({color:0x425345,metalness:.3}));
+const groundTarget=to.getWorldPosition(new THREE.Vector3()).setY(boardBaseY+.07);const grenade=spawn(new THREE.SphereGeometry(.13,12,10),new THREE.MeshStandardMaterial({color:0x425345,metalness:.3}));
 await tween(800,k=>{grenade.position.lerpVectors(origin,groundTarget,k);grenade.position.y+=Math.sin(k*Math.PI)*Math.max(1.8,origin.distanceTo(groundTarget)*.35);grenade.rotation.x=k*14});
 grenade.visible=false;await blast(groundTarget,1.3);
 }else if(type==='b'){
@@ -484,7 +492,7 @@ flash(origin,0xffcc76,.17);const bullet=spawn(new THREE.SphereGeometry(.045,8,6)
 }
 async function walk(actor,target,type){const start=actor.position.clone(),end=new THREE.Vector3(target.x,.12,target.z);setState(actor,'moving');await tween(type==='n'?650:950,k=>{actor.position.lerpVectors(start,end,k);if(type==='n')actor.position.y+=Math.sin(k*Math.PI)*1.9});setState(actor,'idle')}
 async function performMove(from,to){busy=true;clearHighlights();const attacker=actors.get(from),type=attacker.userData.type;const move=game.move({from,to,promotion:'q'});if(!move){busy=false;return}const enPassant=move.flags.includes('e');const capturedSquare=enPassant?to[0]+from[1]:to;const victim=actors.get(capturedSquare);selected=null;legal=[];status(victim?`${TYPES[type]} attacks ${TYPES[victim.userData.type]}!`:`${TYPES[type]} advances to ${to}`);const dest=squareToWorld(to);if(victim){setState(victim,'targeted');if(el('cinematic').checked)await cameraFocus(attacker,victim);setState(attacker,'attacking');await wait(type==='r'?950:650);await effect(attacker,victim,type,from,capturedSquare);victim.userData.deathStyle=deathStyleFor(type);setState(victim,'dying');await wait(type==='n'?1450:type==='r'?1550:650);setState(attacker,'idle');await walk(attacker,dest,type);setState(victim,'idle');await tween(650,k=>{victim.position.y=.12-k*1.7;victim.scale.setScalar(1-.25*k)});boardGroup.remove(victim);actors.delete(capturedSquare)}else await walk(attacker,dest,type);actors.delete(from);actors.set(to,attacker);if(move.flags.includes('k')||move.flags.includes('q')||move.flags.includes('e')||move.flags.includes('p'))syncBoard();if(victim&&el('cinematic').checked)resetCamera();updateTurn();status(game.isGameOver()?'Game over':`${game.turn()==='w'?'White':'Black'} to move`);busy=false}
-function resetCamera(){const from=camera.position.clone(),fromTarget=controls.target.clone(),to=mode==='battle'?new THREE.Vector3(10,15,16):new THREE.Vector3(0,4.5,14.5),target=mode==='battle'?new THREE.Vector3(0,0,0):new THREE.Vector3(0,.45,0);tween(600,k=>{camera.position.lerpVectors(from,to,k);controls.target.lerpVectors(fromTarget,target,k);controls.update()})}
+function resetCamera(){const from=camera.position.clone(),fromTarget=controls.target.clone(),elevation=el('environmentSelect').value==='highlands'?HIGHLANDS_BOARD_ELEVATION:0,to=mode==='battle'?new THREE.Vector3(10,15+elevation,16):new THREE.Vector3(0,4.5,14.5),target=mode==='battle'?new THREE.Vector3(0,elevation,0):new THREE.Vector3(0,.45,0);tween(600,k=>{camera.position.lerpVectors(from,to,k);controls.target.lerpVectors(fromTarget,target,k);controls.update()})}
 // v0.4.11 fixes Rook battle-capture napalm positions and recovers cleanly from effect errors.
 // v0.4.10 previews custom Rook and Knight deaths on the realistic soldier rig.
 // v0.4.9 aligns the preview fire lane and backward grenade flip.
