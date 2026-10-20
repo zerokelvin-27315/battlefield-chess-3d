@@ -70,3 +70,36 @@ lazy-loaded on entering preview; no new external model downloads are introduced.
   two-palette readability, and physical iPhone performance are not verified.
 - Do not treat this first geometry/rigging pass as reference-quality final art
   or promote it to battlefield use before visual review.
+
+## v0.9.1-preview: independent inverse-bind matrices
+
+The first prototype's single-character vertex sampling missed a multi-instance
+failure. Three.js 0.169.0 Skeleton.clone() passes the original boneInverses array
+into the new Skeleton. SkeletonUtils.clone() therefore creates separate bones
+but still shares inverse-bind data. normalizeRig() calls calculateInverses(),
+which empties and repopulates that shared array. Creating the second/dark actor
+then changed the bind transforms of the first/white actor and the cached template.
+This explains why white visibly exploded while the last-created dark actor looked
+intact.
+
+cloneRig() now deep-copies the inverse-bind array and every Matrix4 immediately
+after SkeletonUtils cloning. All preview clone paths use this helper, including
+the source/reference/retargeted diagnostics, so switching previews cannot mutate
+the cached templates either. Armor intentionally shares its own actor's body
+skeleton. The existing normalization and height behavior is preserved.
+
+Regression check (requires three@0.169.0 installed outside the repository):
+
+```sh
+THREE_ROOT=/path/to/node_modules/three node tools/check-rifleman-skinning.mjs
+```
+
+It loads the real production assets and builder, calls the actual normalizer,
+creates both palette instances, verifies that constructing dark cannot change
+white, and verifies that template inverse-bind values remain identical. Both
+actors are sampled at five times across T-pose, Idle, Walk, ready, shooting and
+Death, comparing their rendered body deformation in wrapper-local coordinates
+and rejecting exploded bounds. Repeated rebuilds must also preserve the source.
+The regression failed on the original code and passes with isolated bind data.
+This validates the reported multi-instance failure; browser/iPhone visual checks
+remain a separate requirement.

@@ -2,9 +2,8 @@ import * as THREE from 'https://esm.sh/three@0.169.0';
 import {OrbitControls} from 'https://esm.sh/three@0.169.0/examples/jsm/controls/OrbitControls.js';
 import {Chess} from 'https://esm.sh/chess.js@1.0.0';
 import {GLTFLoader} from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
-import {clone as cloneSkeleton} from 'https://esm.sh/three@0.169.0/examples/jsm/utils/SkeletonUtils.js';
 
-import {createRifleman,disposeRifleman,calibrateRiflemanWeapon,updateRiflemanGrip} from './rifleman.js';
+import {cloneRig,createRifleman,disposeRifleman,calibrateRiflemanWeapon,updateRiflemanGrip} from './rifleman.js?v=0.9.1-preview';
 
 const TYPES={p:'Private',r:'Radio operator',n:'Grenadier',b:'Machine gunner',q:'Sniper',k:'General'};
 const SYMBOL={w:{p:'♙',r:'♖',n:'♘',b:'♗',q:'♕',k:'♔'},b:{p:'♟',r:'♜',n:'♞',b:'♝',q:'♛',k:'♚'}};
@@ -598,8 +597,8 @@ function addRigHelper(root,id){const helper=new THREE.SkeletonHelper(root);helpe
 function playSynced(mixer,clip,name){if(!mixer||!clip)return;const action=mixer.clipAction(clip);if(name==='Death01'){action.setLoop(THREE.LoopOnce,1);action.clampWhenFinished=true}action.play()}
 function setupSourceComparison(selected,userScale){
  if(!animationSource||!referenceTemplate)return;
- const source=cloneSkeleton(animationSource.scene),sourceRig=normalizeRig(source,-1.5,userScale),sourceScale=sourceRig.scale;sourceWrapper=sourceRig.wrapper;setRigMeshVisibility(source,el('showSourceMesh').checked);previewGroup.add(sourceWrapper);diagnosticObjects.push(sourceWrapper);sourceActor=source;addRigHelper(source,'showSourceSkeleton');sourceMixer=new THREE.AnimationMixer(source);
- const reference=cloneSkeleton(referenceTemplate),referenceRig=normalizeRig(reference,0,userScale);referenceWrapper=referenceRig.wrapper;setRigMeshVisibility(reference,el('showReferenceMesh').checked);previewGroup.add(referenceWrapper);diagnosticObjects.push(referenceWrapper);referenceActor=reference;addRigHelper(reference,'showReferenceSkeleton');referenceMixer=new THREE.AnimationMixer(reference);
+ const source=cloneRig(animationSource.scene),sourceRig=normalizeRig(source,-1.5,userScale),sourceScale=sourceRig.scale;sourceWrapper=sourceRig.wrapper;setRigMeshVisibility(source,el('showSourceMesh').checked);previewGroup.add(sourceWrapper);diagnosticObjects.push(sourceWrapper);sourceActor=source;addRigHelper(source,'showSourceSkeleton');sourceMixer=new THREE.AnimationMixer(source);
+ const reference=cloneRig(referenceTemplate),referenceRig=normalizeRig(reference,0,userScale);referenceWrapper=referenceRig.wrapper;setRigMeshVisibility(reference,el('showReferenceMesh').checked);previewGroup.add(referenceWrapper);diagnosticObjects.push(referenceWrapper);referenceActor=reference;addRigHelper(reference,'showReferenceSkeleton');referenceMixer=new THREE.AnimationMixer(reference);
  const clip=animationSource.animations.find(a=>a.name===selected);if(clip){playSynced(sourceMixer,clip,selected);playSynced(referenceMixer,clip,selected)}
  addBoneGuides(source);addBoneGuides(reference);return sourceScale;
 }
@@ -626,7 +625,7 @@ function attachRealistic(){
  if(el('riflemanPreview').checked){buildRiflemen();return;}
  removeRealistic();
  if(mode!=='preview'||!el('realisticPreview').checked||!realisticTemplate||!referenceTemplate||!animationSource)return;
- const proxy=previewActors[0];if(!proxy)return;const userScale=Number(el('soldierScale').value),visual=cloneSkeleton(realisticTemplate),soldierRig=normalizeRig(visual,1.5,userScale),scale=soldierRig.scale;realisticWrapper=soldierRig.wrapper;
+ const proxy=previewActors[0];if(!proxy)return;const userScale=Number(el('soldierScale').value),visual=cloneRig(realisticTemplate),soldierRig=normalizeRig(visual,1.5,userScale),scale=soldierRig.scale;realisticWrapper=soldierRig.wrapper;
  visual.traverse(o=>{if(o.isLight)o.visible=false;if(o.isMesh){o.castShadow=true;o.frustumCulled=false}});
  realisticActor=visual;previewGroup.add(realisticWrapper);diagnosticObjects.push(realisticWrapper);setRigMeshVisibility(visual,el('showSoldierMesh').checked);if(el('showSkeleton').checked)rigHelper=addRigHelper(visual,'showSkeleton');
  for(const piece of previewActors)if(piece?.userData.body){piece.userData.body.visible=false;piece.userData.badge.visible=false}

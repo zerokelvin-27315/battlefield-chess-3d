@@ -8,10 +8,22 @@ const PALETTES={
  dark:{cloth:'#444c40',plate:'#545d50',edge:'#78816a',webbing:'#303a32',rubber:'#222a2b',metal:'#353e40',skin:'#bd9175'}
 };
 
+// SkeletonUtils clones bones and skeleton objects, but Three.js 0.169.0 keeps
+// the inverse-bind array shared. Normalizing/rebinding one actor must never
+// overwrite the template or another actor's bind transforms.
+export function cloneRig(template){
+ const root=cloneSkeleton(template),seen=new Set();
+ root.traverse(o=>{if(o.isSkinnedMesh&&!seen.has(o.skeleton)){
+  seen.add(o.skeleton);
+  o.skeleton.boneInverses=o.skeleton.boneInverses.map(matrix=>matrix.clone());
+ }});
+ return root;
+}
+
 // Fit in the reference model's unanimated coordinate system, then express every
 // rigid part in its bone frame. Direct UAL tracks remain entirely unmodified.
 export function createRifleman(template,paletteName){
- const root=cloneSkeleton(template),palette=PALETTES[paletteName],ownedGeometries=[],ownedMaterials=[];
+ const root=cloneRig(template),palette=PALETTES[paletteName],ownedGeometries=[],ownedMaterials=[];
  root.updateMatrixWorld(true);
  const bodyMeshes=[];root.traverse(o=>{if(o.isSkinnedMesh)bodyMeshes.push(o)});
  const body=bodyMeshes.find(o=>o.name==='SuperHero_Male');
