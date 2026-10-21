@@ -184,3 +184,52 @@ final-pose holding, backwards scrubbing, replay and the previous skinning checks
 No additional models or textures are loaded. These sequences currently apply to
 the rifleman fitting studio, pending visual review before battlefield integration.
 Browser rendering/iPhone review is still needed for the timing and blast motion.
+
+## v0.9.5-preview: simulated chest launch and leg-sweep blast
+
+Chest shot and blast now use actual offline Cannon-es 0.20.0 ragdoll simulations,
+baked to `assets/animations/ragdoll-deaths.json`. Headshot and repeated hits keep
+their prior UAL compositions. Browser playback loads only the roughly 218 KiB
+JSON clips; the physics engine is not a browser dependency.
+
+Reproduce with pinned authoring dependencies:
+
+```sh
+npm ci --prefix tools/ragdoll
+npm run bake --prefix tools/ragdoll
+THREE_ROOT=tools/ragdoll/node_modules/three node tools/check-rifleman-skinning.mjs
+```
+
+The authoring script loads the actual fitted rifleman, uses relaxed idle arms
+with a balanced standing stance, and creates rigid bodies for pelvis, abdomen,
+chest, head, upper/lower arms, hands, thighs, calves and feet. Cone/twist constraints
+join them. Twist references are calibrated in a common initial world frame;
+independent arbitrary local tangents introduced unwanted preloaded rotation.
+The fixed 360 Hz solver uses 80 iterations. Joint anchor separation stays below
+1 mm in these generated sequences. Floor contacts use friction and zero restitution;
+body-to-body self collision is disabled for this authoring pass.
+
+Chest impact applies an upward/backward impulse to the chest over 60 ms. The
+torso leads, both feet leave the floor, the limbs trail, and the rig settles on
+its back behind the original position. Blast applies backward impulses to calves
+and feet; legs sweep behind the hips and the character pitches forward, finishing
+face down. Colliders approximate the dressed body. Any residual mesh penetration
+is corrected offline in the root track. The rifle releases after .16 s into its
+own rigid body, avoiding a held barrel propping up the fallen character.
+
+Body rotations are transformed into bone-local frames; all original bone lengths
+are preserved. Static channels are collapsed to one key and keyframes are sampled
+at 30 Hz. Replays and both palette instances use the same deterministic baked
+motion. These clips do not dynamically react to other pieces or terrain at runtime.
+
+Validation checks chest-leading motion, both feet lifted, landing behind the
+starting position, face-up chest-shot finish, legs leading backward in the blast,
+face-down blast finish, bounded joint error, and reproduction of simulated head,
+torso and pelvis trajectories by actual Three.js playback. Both visible skinned
+rigs settle on the floor within numerical tolerance. Existing palette/deformation,
+holding, backward scrub and replay checks pass. Offline side-view mesh sequences
+at 0, .2, .5, .9 and 3.6 seconds were inspected. Browser/iPhone visual review is
+still required; the existing Cloudflare preview workflow is unchanged.
+
+Engine references: https://github.com/pmndrs/cannon-es and
+https://pmndrs.github.io/cannon-es/docs/classes/ConeTwistConstraint.html

@@ -4,7 +4,7 @@ import {Chess} from 'https://esm.sh/chess.js@1.0.0';
 import {GLTFLoader} from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
 
 import {cloneRig,createRifleman,disposeRifleman,calibrateRiflemanWeapon,updateRiflemanGrip} from './rifleman.js?v=0.9.3-preview';
-import {DEATH_SEQUENCES,isDeathSequence,getPreviewClip,playPreviewClip,seekPreviewClip} from './death-sequences.js?v=0.9.4-preview';
+import {DEATH_SEQUENCES,isDeathSequence,registerRagdollClips,getPreviewClip,playPreviewClip,seekPreviewClip} from './death-sequences.js?v=0.9.5-preview';
 
 const TYPES={p:'Private',r:'Radio operator',n:'Grenadier',b:'Machine gunner',q:'Sniper',k:'General'};
 const SYMBOL={w:{p:'♙',r:'♖',n:'♘',b:'♗',q:'♕',k:'♔'},b:{p:'♟',r:'♜',n:'♞',b:'♝',q:'♛',k:'♚'}};
@@ -657,14 +657,15 @@ el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').
 el('pauseRig').addEventListener('change',()=>{if(el('pauseRig').checked)el('rigFrame').value=Math.round((riflemanMixers[0]?.time||realisticMixer?.time||0)*100)});
 el('rigFrame').addEventListener('input',()=>{el('pauseRig').checked=true;const t=Number(el('rigFrame').value)/100;for(const mixer of [sourceMixer,referenceMixer,realisticMixer])if(mixer){mixer.setTime(t);mixer.update(0)}updatePoseDiagnostics()});
 // Rifleman fitting studio: direct playback on the existing Quaternius skeleton.
-let riflemen=[],riflemanMixers=[],uniformTemplates=null,uniformLoading=false;
+let riflemen=[],riflemanMixers=[],uniformTemplates=null,uniformLoading=false,ragdollData=null,ragdollLoading=false,ragdollRegistered=false;
 for(const sequence of DEATH_SEQUENCES){let option=Array.from(el('riflemanAnimation').options).find(o=>o.value===sequence.name);if(!option){option=document.createElement('option');option.value=sequence.name;el('riflemanAnimation').append(option)}option.textContent=sequence.label;}
 const riflemanReplay=document.createElement('button');riflemanReplay.id='riflemanReplay';riflemanReplay.textContent='Replay motion';el('riflemanAnimation').parentElement.after(riflemanReplay);
 const deathHint=document.createElement('small');deathHint.textContent='Death sequences play once and hold. Replay motion restarts them; Pause / Time lets you inspect any frame.';riflemanReplay.after(deathHint);
 riflemanReplay.onclick=()=>{el('pauseRig').checked=false;el('rigFrame').value=0;for(const actor of riflemen){actor.time=0;actor.action?.reset().play();if(actor.action)seekPreviewClip(actor.mixer,actor.action,0)}};
 function removeRiflemen(){for(const m of riflemanMixers)m.stopAllAction();riflemanMixers=[];for(const a of riflemen){previewGroup.remove(a.wrapper);disposeRifleman(a.visual)}riflemen=[];}
 function buildRiflemen(){
- if(mode!=='preview'||!el('riflemanPreview').checked||!referenceTemplate||!animationSource||!uniformTemplates)return;
+ if(mode!=='preview'||!el('riflemanPreview').checked||!referenceTemplate||!animationSource||!uniformTemplates||!ragdollData)return;
+ if(!ragdollRegistered){registerRagdollClips(animationSource.animations,ragdollData);ragdollRegistered=true;}
  removeRiflemen();
  const name=el('riflemanAnimation').value,clip=getPreviewClip(animationSource.animations,name);
  el('rigFrame').max=Math.ceil((clip?.duration||4)*100);el('rigFrame').value=0;
@@ -680,6 +681,10 @@ function buildRiflemen(){
  status('Rifleman prototype • desert / dark • '+el('riflemanAnimation').selectedOptions[0].textContent);
 }
 function loadRiflemen(){
+ if(!ragdollData&&!ragdollLoading){
+  ragdollLoading=true;
+  fetch('./assets/animations/ragdoll-deaths.json?v=0.9.5-preview').then(response=>{if(!response.ok)throw new Error('Death animation download failed');return response.json()}).then(data=>{ragdollLoading=false;ragdollData=data;buildRiflemen()}).catch(error=>{ragdollLoading=false;status('Death animations failed to load; reopen Preview studio to retry');console.warn(error)});
+ }
  if(!uniformTemplates&&!uniformLoading){
   uniformLoading=true;status('Loading rigged uniform…');
   Promise.all(['Male_Peasant_Body','Male_Ranger_Legs','Male_Ranger_Arms','Male_Ranger_Feet_Boots'].map(name=>realisticLoader.loadAsync('./assets/clothing/'+name+'.gltf'))).then(models=>{

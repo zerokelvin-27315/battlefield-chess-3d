@@ -31,6 +31,16 @@ async function loadAsset(relative){
 }
 const reference=await loadAsset('assets/reference/scene.gltf');
 const library=await loadAsset('assets/animations/UAL1_Standard.glb');
+const ragdollData=JSON.parse(await fs.readFile(path.join(repo,'assets/animations/ragdoll-deaths.json'),'utf8'));
+deaths.registerRagdollClips(library.animations,ragdollData);
+const chestMotion=ragdollData.diagnostics.DeathChest,blastMotion=ragdollData.diagnostics.DeathBlast;
+assert(chestMotion['0.30'].chest[2]<chestMotion['0.30'].pelvis[2]-.1,'Chest must lead the backwards launch');
+assert(chestMotion['0.30'].feet.every(p=>p[1]>.16),'Chest shot must lift both feet');
+assert(chestMotion['3.60'].chest[2]<chestMotion['0.00'].chest[2]-.6,'Chest shot must land behind its start');
+assert(chestMotion['3.60'].faceDirection[1]>.6,'Chest shot must land face up');
+assert(blastMotion['0.30'].feet.every(p=>p[2]<blastMotion['0.30'].pelvis[2]-.5),'Blast must sweep legs behind the pelvis');
+assert(blastMotion['3.60'].faceDirection[1]<-.8,'Blast must finish face down');
+for(const motion of [chestMotion,blastMotion])assert(motion.maxAnchorError<.005,'Physics joints must remain connected');
 const garments=await Promise.all(['Male_Peasant_Body','Male_Ranger_Legs','Male_Ranger_Arms','Male_Ranger_Feet_Boots'].map(name=>loadAsset('assets/clothing/'+name+'.gltf').then(g=>g.scene)));
 const ready=library.animations.find(c=>c.name==='Pistol_Idle_Loop');
 function inverseSnapshot(root){const values=[];root.traverse(o=>{if(o.isSkinnedMesh)values.push(o.skeleton.boneInverses.flatMap(m=>m.toArray()))});return values;}
@@ -58,6 +68,11 @@ for(const name of ['A_TPose','Idle_Loop','Walk_Loop','Pistol_Idle_Loop','Pistol_
   if(name.startsWith('Pistol_'))actors.forEach(a=>rifleman.updateRiflemanGrip(a.visual));
   const a=renderedBody(first),b=renderedBody(second);
   assert(maxDifference(a,b)<1e-4,`${name}@${t}: palette instances must have identical local deformation`);
+  const diagnostic=ragdollData.diagnostics[name]?.[t.toFixed(2)];
+  if(diagnostic)for(const [field,bone] of [['head','Head'],['chest','spine_03'],['pelvis','pelvis']]){
+   const actual=first.visual.getObjectByName(bone).getWorldPosition(new THREE.Vector3()).applyMatrix4(first.wrapper.matrixWorld.clone().invert()).toArray();
+   assert(maxDifference(actual,diagnostic[field])<1e-4,`${name}: playback must reproduce the simulated ${field} trajectory`);
+  }
   for(const actor of actors){const box=new THREE.Box3().setFromObject(actor.visual,true);assert(box.getSize(new THREE.Vector3()).length()<3,`${name}@${t}: character exploded`);}
  }
  if(deaths.isDeathSequence(name)){
@@ -67,6 +82,10 @@ for(const name of ['A_TPose','Idle_Loop','Walk_Loop','Pistol_Idle_Loop','Pistol_
   assert(maxDifference(start,end)>.01,`${name}: backwards scrub must restore the starting pose`);
   actions[0].reset().play();deaths.seekPreviewClip(mixers[0],actions[0],0);
   assert(maxDifference(start,renderedBody(first))<1e-4,`${name}: replay starts consistently`);
+  if(name==='DeathChest'||name==='DeathBlast'){
+   deaths.seekPreviewClip(mixers[0],actions[0],clip.duration);const points=renderedBody(first);let floor=Infinity;for(let i=1;i<points.length;i+=3)floor=Math.min(floor,points[i]);
+   assert(floor>-.005&&floor<.02,`${name}: visible body must settle on the floor`);
+  }
  }
  mixers.forEach(m=>m.stopAllAction());console.log('PASS',name,'both palettes, six sample times');
 }
