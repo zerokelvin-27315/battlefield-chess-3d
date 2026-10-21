@@ -161,3 +161,26 @@ motion samples for both palettes. Front and rear offline geometry projections
 were inspected. These checks cover geometry/deformation, not browser shading or
 physical iPhone performance. Both module URLs carry the new preview version to
 avoid retaining an older rifleman module in a mobile browser cache.
+
+## v0.9.4-preview: death sequence choices
+
+The shipped Standard animation library contains only one full death (`Death01`)
+plus `Hit_Chest` and `Hit_Head`. `death-sequences.js` composes those existing CC0
+tracks into four additional preview choices: chest shot, headshot, blast knockdown
+and repeated hits. They are authored compositions, not extra downloaded Quaternius
+death clips. Chest/head sequences lead with the appropriate reaction and blend
+into the collapse; repeated hits chain three chest reactions before collapse.
+Blast knockdown accelerates the native collapse and adds a small root lift/drift.
+Source clips are never modified and generated clips are cached per library.
+
+All five deaths play once and hold. Replay restarts the existing actions without
+rebuilding the clothing/armor. The shared scrubber uses the selected clip duration;
+seeking explicitly reactivates a clamped action, so users can scrub backwards
+after the final pose. Original rig-comparison controls retain their 4-second range.
+
+Validation samples both clothed characters in all ten available preview motions
+at six times, including the end of each clip, and verifies unchanged source clips,
+final-pose holding, backwards scrubbing, replay and the previous skinning checks.
+No additional models or textures are loaded. These sequences currently apply to
+the rifleman fitting studio, pending visual review before battlefield integration.
+Browser rendering/iPhone review is still needed for the timing and blast motion.

@@ -15,6 +15,8 @@ const {clone:cloneSkeleton}=await import(examplesUrl+'utils/SkeletonUtils.js');
 globalThis.ProgressEvent=class{constructor(type,init){Object.assign(this,{type},init)}};
 const builder=(await fs.readFile(path.join(repo,'rifleman.js'),'utf8')).replaceAll('https://esm.sh/three@0.169.0/examples/jsm/',examplesUrl).replaceAll('https://esm.sh/three@0.169.0',moduleUrl);
 const rifleman=await import('data:text/javascript;base64,'+Buffer.from(builder).toString('base64'));
+const deathCode=(await fs.readFile(path.join(repo,'death-sequences.js'),'utf8')).replaceAll('https://esm.sh/three@0.169.0',moduleUrl);
+const deaths=await import('data:text/javascript;base64,'+Buffer.from(deathCode).toString('base64'));
 const main=await fs.readFile(path.join(repo,'main.js'),'utf8');
 // Exercise the production normalizer, including the original rebind behavior.
 const RIG_PREVIEW_HEIGHT=1.1;
@@ -47,18 +49,28 @@ function maxDifference(a,b){assert.equal(a.length,b.length);let maximum=0;for(le
 assert(JSON.stringify(inverseSnapshot(reference.scene))===JSON.stringify(originalInverses),'Building previews must not mutate template inverse bind matrices');
 const afterSecond=renderedBody(first);
 assert(maxDifference(beforeSecond,afterSecond)<1e-5,'Building the second palette must not deform the first');
-for(const name of ['A_TPose','Idle_Loop','Walk_Loop','Pistol_Idle_Loop','Pistol_Shoot','Death01']){
+const sourceDeathValues=JSON.stringify(library.animations.find(c=>c.name==='Death01').tracks.map(t=>Array.from(t.values)));
+for(const name of ['A_TPose','Idle_Loop','Walk_Loop','Pistol_Idle_Loop','Pistol_Shoot',...deaths.DEATH_SEQUENCES.map(s=>s.name)]){
  const actors=[first,second],mixers=actors.map(a=>new THREE.AnimationMixer(a.visual));
- mixers.forEach(m=>m.clipAction(library.animations.find(c=>c.name===name)).play());
- for(const t of [0,.4,.8,1.2,2]){
-  mixers.forEach(m=>m.setTime(t));
+ const clip=deaths.getPreviewClip(library.animations,name),actions=mixers.map(m=>deaths.playPreviewClip(m,clip));
+ for(const t of [0,.4,.8,1.2,2,clip.duration]){
+  mixers.forEach((m,i)=>deaths.seekPreviewClip(m,actions[i],t));
   if(name.startsWith('Pistol_'))actors.forEach(a=>rifleman.updateRiflemanGrip(a.visual));
   const a=renderedBody(first),b=renderedBody(second);
   assert(maxDifference(a,b)<1e-4,`${name}@${t}: palette instances must have identical local deformation`);
   for(const actor of actors){const box=new THREE.Box3().setFromObject(actor.visual,true);assert(box.getSize(new THREE.Vector3()).length()<3,`${name}@${t}: character exploded`);}
  }
- mixers.forEach(m=>m.stopAllAction());console.log('PASS',name,'both palettes, five sample times');
+ if(deaths.isDeathSequence(name)){
+  const end=renderedBody(first);deaths.seekPreviewClip(mixers[0],actions[0],clip.duration+1);
+  assert(maxDifference(end,renderedBody(first))<1e-4,`${name}: hold final pose`);
+  deaths.seekPreviewClip(mixers[0],actions[0],0);const start=renderedBody(first);
+  assert(maxDifference(start,end)>.01,`${name}: backwards scrub must restore the starting pose`);
+  actions[0].reset().play();deaths.seekPreviewClip(mixers[0],actions[0],0);
+  assert(maxDifference(start,renderedBody(first))<1e-4,`${name}: replay starts consistently`);
+ }
+ mixers.forEach(m=>m.stopAllAction());console.log('PASS',name,'both palettes, six sample times');
 }
+assert.equal(JSON.stringify(library.animations.find(c=>c.name==='Death01').tracks.map(t=>Array.from(t.values))),sourceDeathValues,'Death variants must not mutate the source clip');
 for(let i=0;i<3;i++)build(i%2?'dark':'desert',i-1);
 assert(JSON.stringify(inverseSnapshot(reference.scene))===JSON.stringify(originalInverses),'Repeated preview rebuilds must preserve the template');
 console.log('PASS independent binds, shared template, and repeated preview builds');

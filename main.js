@@ -4,6 +4,7 @@ import {Chess} from 'https://esm.sh/chess.js@1.0.0';
 import {GLTFLoader} from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
 
 import {cloneRig,createRifleman,disposeRifleman,calibrateRiflemanWeapon,updateRiflemanGrip} from './rifleman.js?v=0.9.3-preview';
+import {DEATH_SEQUENCES,isDeathSequence,getPreviewClip,playPreviewClip,seekPreviewClip} from './death-sequences.js?v=0.9.4-preview';
 
 const TYPES={p:'Private',r:'Radio operator',n:'Grenadier',b:'Machine gunner',q:'Sniper',k:'General'};
 const SYMBOL={w:{p:'♙',r:'♖',n:'♘',b:'♗',q:'♕',k:'♔'},b:{p:'♟',r:'♜',n:'♞',b:'♝',q:'♛',k:'♚'}};
@@ -642,6 +643,7 @@ function attachRealistic(){
  status(selectedAnimation==='celebration'?'Soldier • Celebration Dance (embedded animation)':clip?'Synchronized Quaternius • '+selectedAnimation:'Rest-pose comparison');
 }
 function loadRealistic(){
+ el('rigFrame').max=400;
  if(!realisticTemplate&&!realisticLoading){realisticLoading=true;status('Loading soldier rig…');realisticLoader.load('./assets/soldier/scene.gltf',g=>{realisticLoading=false;realisticTemplate=g.scene;realisticClip=g.animations[0]||null;attachRealistic()},undefined,e=>{realisticLoading=false;status('Soldier model failed to load; check assets/soldier/');console.warn('Soldier asset missing',e)})}
  if(!referenceTemplate&&!referenceLoading){referenceLoading=true;realisticLoader.load('./assets/reference/scene.gltf',g=>{referenceLoading=false;referenceTemplate=g.scene;attachRealistic()},undefined,e=>{referenceLoading=false;status('Quaternius reference failed to load; check assets/reference/');console.warn('Reference rig asset missing',e)})}
  loadAnimationLibrary();if(realisticTemplate&&referenceTemplate&&animationSource)attachRealistic();
@@ -656,18 +658,24 @@ el('pauseRig').addEventListener('change',()=>{if(el('pauseRig').checked)el('rigF
 el('rigFrame').addEventListener('input',()=>{el('pauseRig').checked=true;const t=Number(el('rigFrame').value)/100;for(const mixer of [sourceMixer,referenceMixer,realisticMixer])if(mixer){mixer.setTime(t);mixer.update(0)}updatePoseDiagnostics()});
 // Rifleman fitting studio: direct playback on the existing Quaternius skeleton.
 let riflemen=[],riflemanMixers=[],uniformTemplates=null,uniformLoading=false;
+for(const sequence of DEATH_SEQUENCES){let option=Array.from(el('riflemanAnimation').options).find(o=>o.value===sequence.name);if(!option){option=document.createElement('option');option.value=sequence.name;el('riflemanAnimation').append(option)}option.textContent=sequence.label;}
+const riflemanReplay=document.createElement('button');riflemanReplay.id='riflemanReplay';riflemanReplay.textContent='Replay motion';el('riflemanAnimation').parentElement.after(riflemanReplay);
+const deathHint=document.createElement('small');deathHint.textContent='Death sequences play once and hold. Replay motion restarts them; Pause / Time lets you inspect any frame.';riflemanReplay.after(deathHint);
+riflemanReplay.onclick=()=>{el('pauseRig').checked=false;el('rigFrame').value=0;for(const actor of riflemen){actor.time=0;actor.action?.reset().play();if(actor.action)seekPreviewClip(actor.mixer,actor.action,0)}};
 function removeRiflemen(){for(const m of riflemanMixers)m.stopAllAction();riflemanMixers=[];for(const a of riflemen){previewGroup.remove(a.wrapper);disposeRifleman(a.visual)}riflemen=[];}
 function buildRiflemen(){
  if(mode!=='preview'||!el('riflemanPreview').checked||!referenceTemplate||!animationSource||!uniformTemplates)return;
  removeRiflemen();
- const name=el('riflemanAnimation').value,clip=animationSource.animations.find(c=>c.name===name);
+ const name=el('riflemanAnimation').value,clip=getPreviewClip(animationSource.animations,name);
+ el('rigFrame').max=Math.ceil((clip?.duration||4)*100);el('rigFrame').value=0;
  for(const [palette,x] of [['desert',-.60],['dark',.60]]){
   const visual=createRifleman(referenceTemplate,palette,uniformTemplates);
   calibrateRiflemanWeapon(visual,animationSource.animations.find(c=>c.name==='Pistol_Idle_Loop'));
   const rig=normalizeRig(visual,x,1);
   rig.wrapper.position.y-=.075; // Preview pads end at y=.04; the old floor was y=.12.
-  previewGroup.add(rig.wrapper);riflemen.push({visual,wrapper:rig.wrapper});
-  const mixer=new THREE.AnimationMixer(visual);if(clip)playSynced(mixer,clip,name);riflemanMixers.push(mixer);
+  previewGroup.add(rig.wrapper);
+  const mixer=new THREE.AnimationMixer(visual),action=clip?playPreviewClip(mixer,clip):null;riflemanMixers.push(mixer);
+  riflemen.push({visual,wrapper:rig.wrapper,mixer,action,duration:clip?.duration||4,time:0});
  }
  status('Rifleman prototype • desert / dark • '+el('riflemanAnimation').selectedOptions[0].textContent);
 }
@@ -682,7 +690,11 @@ function loadRiflemen(){
  loadAnimationLibrary();buildRiflemen();
 }
 function updateRiflemen(dt){
- for(const mixer of riflemanMixers){if(el('pauseRig').checked){mixer.setTime(Number(el('rigFrame').value)/100);mixer.update(0)}else mixer.update(dt)}
+ for(const actor of riflemen){
+  actor.time=el('pauseRig').checked?Number(el('rigFrame').value)/100:actor.time+dt;
+  if(isDeathSequence(el('riflemanAnimation').value))actor.time=Math.min(actor.duration,actor.time);
+  if(actor.action)seekPreviewClip(actor.mixer,actor.action,actor.time);
+ }
  if(el('riflemanAnimation').value.startsWith('Pistol_'))for(const {visual} of riflemen)updateRiflemanGrip(visual);
 }
 el('riflemanPreview').addEventListener('change',()=>{if(el('riflemanPreview').checked)el('realisticPreview').checked=false;previewBuild();resetCamera()});
