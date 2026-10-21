@@ -103,3 +103,39 @@ and rejecting exploded bounds. Repeated rebuilds must also preserve the source.
 The regression failed on the original code and passes with isolated bind data.
 This validates the reported multi-instance failure; browser/iPhone visual checks
 remain a separate requirement.
+
+## v0.9.2-preview: Quaternius clothing foundation
+
+Source: https://quaternius.itch.io/modular-character-outfits-fantasy
+
+The official free Standard pack was downloaded and inspected. Its included
+male Peasant and Ranger parts provide a tunic, pants, arms and modeled boots.
+Selected parts are imported into `assets/clothing` with the original license
+and author readme. Only glTF dependencies are included; texture dimensions are
+limited to 1024 pixels for the mobile preview. The selected assets total 7.5 MiB.
+Run `python3 tools/import-quaternius-clothing.py /path/to/Standard.zip` to reproduce.
+
+All selected garments have the same 65 named joints as the existing character,
+but some bind proportions differ (notably shoulder and hip widths). Garment
+positions/normals are transferred through named source/target bind transforms
+before rebinding to the existing rifleman's skeleton. The shared source garments
+are never mutated. Each palette owns its fitted geometry and materials.
+
+Following Quaternius's supplied readme, the covered full body is removed; only
+the original head/neck remains. Geometry attributes are compacted so hidden body
+vertices do not influence precise bounds. The garments supply torso, seat, leg,
+arm and boot coverage. The previous box boot shells are omitted. Garment albedo
+is converted to luminance in the material shader and tinted to each army palette,
+preserving authored normal and roughness maps. This is an adapted fantasy
+clothing foundation; tailoring it into the final tactical uniform remains art work.
+
+The original `.12` normalization floor left an `.08` gap above the preview pads
+at `.04`. Rifleman wrappers now move down `.075`, leaving a small clearance.
+This changes only the fitting studio.
+
+Validation: regression checks now sample *every skinned mesh*, including all
+garments and armor, across both palettes and all six preview motions. Template
+immutability, repeated rebuilds, finite vertex coordinates, equivalent local
+deformation and bounded character extents pass. Offline front/rear geometry
+projections were inspected for coverage. Actual browser shading and iPhone
+performance remain unverified; previous cloud-browser verification timed out.

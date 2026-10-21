@@ -655,22 +655,29 @@ el('realisticPreview').addEventListener('change',()=>{if(el('realisticPreview').
 el('pauseRig').addEventListener('change',()=>{if(el('pauseRig').checked)el('rigFrame').value=Math.round((riflemanMixers[0]?.time||realisticMixer?.time||0)*100)});
 el('rigFrame').addEventListener('input',()=>{el('pauseRig').checked=true;const t=Number(el('rigFrame').value)/100;for(const mixer of [sourceMixer,referenceMixer,realisticMixer])if(mixer){mixer.setTime(t);mixer.update(0)}updatePoseDiagnostics()});
 // Rifleman fitting studio: direct playback on the existing Quaternius skeleton.
-let riflemen=[],riflemanMixers=[];
+let riflemen=[],riflemanMixers=[],uniformTemplates=null,uniformLoading=false;
 function removeRiflemen(){for(const m of riflemanMixers)m.stopAllAction();riflemanMixers=[];for(const a of riflemen){previewGroup.remove(a.wrapper);disposeRifleman(a.visual)}riflemen=[];}
 function buildRiflemen(){
- if(mode!=='preview'||!el('riflemanPreview').checked||!referenceTemplate||!animationSource)return;
+ if(mode!=='preview'||!el('riflemanPreview').checked||!referenceTemplate||!animationSource||!uniformTemplates)return;
  removeRiflemen();
  const name=el('riflemanAnimation').value,clip=animationSource.animations.find(c=>c.name===name);
  for(const [palette,x] of [['desert',-.60],['dark',.60]]){
-  const visual=createRifleman(referenceTemplate,palette);
+  const visual=createRifleman(referenceTemplate,palette,uniformTemplates);
   calibrateRiflemanWeapon(visual,animationSource.animations.find(c=>c.name==='Pistol_Idle_Loop'));
   const rig=normalizeRig(visual,x,1);
+  rig.wrapper.position.y-=.075; // Preview pads end at y=.04; the old floor was y=.12.
   previewGroup.add(rig.wrapper);riflemen.push({visual,wrapper:rig.wrapper});
   const mixer=new THREE.AnimationMixer(visual);if(clip)playSynced(mixer,clip,name);riflemanMixers.push(mixer);
  }
  status('Rifleman prototype • desert / dark • '+el('riflemanAnimation').selectedOptions[0].textContent);
 }
 function loadRiflemen(){
+ if(!uniformTemplates&&!uniformLoading){
+  uniformLoading=true;status('Loading rigged uniform…');
+  Promise.all(['Male_Peasant_Body','Male_Ranger_Legs','Male_Ranger_Arms','Male_Ranger_Feet_Boots'].map(name=>realisticLoader.loadAsync('./assets/clothing/'+name+'.gltf'))).then(models=>{
+   uniformLoading=false;uniformTemplates=models.map(model=>model.scene);buildRiflemen();
+  }).catch(error=>{uniformLoading=false;status('Uniform failed to load; reopen Preview studio to retry');console.warn(error)});
+ }
  if(!referenceTemplate&&!referenceLoading){referenceLoading=true;realisticLoader.load('./assets/reference/scene.gltf',g=>{referenceLoading=false;referenceTemplate=g.scene;buildRiflemen()},undefined,e=>{referenceLoading=false;status('Rifleman reference failed to load');console.warn(e)})}
  loadAnimationLibrary();buildRiflemen();
 }

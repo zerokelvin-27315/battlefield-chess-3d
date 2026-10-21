@@ -22,7 +22,7 @@ export function cloneRig(template){
 
 // Fit in the reference model's unanimated coordinate system, then express every
 // rigid part in its bone frame. Direct UAL tracks remain entirely unmodified.
-export function createRifleman(template,paletteName){
+export function createRifleman(template,paletteName,garments=[]){
  const root=cloneRig(template),palette=PALETTES[paletteName],ownedGeometries=[],ownedMaterials=[];
  root.updateMatrixWorld(true);
  const bodyMeshes=[];root.traverse(o=>{if(o.isSkinnedMesh)bodyMeshes.push(o)});
@@ -41,6 +41,21 @@ export function createRifleman(template,paletteName){
   mask[i]=skin;const c=cloth.clone().lerp(rubber,boot);c.toArray(colors,i*3);
  }
  bodyGeometry.setAttribute('color',new THREE.BufferAttribute(colors,3));bodyGeometry.setAttribute('faceMask',new THREE.BufferAttribute(mask,1));body.geometry=bodyGeometry;
+ if(garments.length){
+  // Outfits include their own body coverage. Keep just the original head/neck,
+  // compacting all attributes so precise bounds also exclude the hidden body.
+  const kept=[],position=bodyGeometry.attributes.position,index=bodyGeometry.index;
+  const count=index?index.count:position.count;
+  for(let i=0;i<count;i+=3){const tri=[0,1,2].map(j=>index?index.getX(i+j):i+j);if(tri.every(v=>position.getY(v)>1.47))kept.push(...tri);}
+  const head=new THREE.BufferGeometry();
+  for(const [name,attribute] of Object.entries(bodyGeometry.attributes)){
+   const array=new attribute.array.constructor(kept.length*attribute.itemSize);
+   kept.forEach((vertex,i)=>{for(let c=0;c<attribute.itemSize;c++)array[i*attribute.itemSize+c]=attribute.array[vertex*attribute.itemSize+c]});
+   head.setAttribute(name,new THREE.BufferAttribute(array,attribute.itemSize,attribute.normalized));
+  }
+  body.geometry=head;ownedGeometries.push(head);
+  fitGarments(root,body,garments,palette,ownedGeometries,ownedMaterials);
+ }
  const bodyMaterial=new THREE.MeshStandardMaterial({map:body.material.map,vertexColors:true,roughness:.95});
  bodyMaterial.onBeforeCompile=shader=>{
   shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nattribute float faceMask; varying float vFaceMask;').replace('#include <begin_vertex>','#include <begin_vertex>\nvFaceMask=faceMask;');
@@ -84,8 +99,10 @@ export function createRifleman(template,paletteName){
   plate('thigh_'+side,[.17,.08,.105],[s*.12,.91,.005],'webbing');
   plate('calf_'+side,[.155,.17,.10],[s*.114,.535,.02]);
   plate('calf_'+side,[.12,.24,.065],[s*.114,.36,.018]);
-  plate('foot_'+side,[.18,.09,.29],[s*.114,.055,.01],'rubber');
-  plate('foot_'+side,[.165,.075,.13],[s*.114,.11,.08]);
+  if(!garments.length){
+   plate('foot_'+side,[.18,.09,.29],[s*.114,.055,.01],'rubber');
+   plate('foot_'+side,[.165,.075,.13],[s*.114,.11,.08]);
+  }
  }
  // Helmet is an actual open-bottom shell; goggles and ear protection hide hair.
  ellipsoid('Head',[.126,.125,.131],[0,1.739,-.013],'plate',0,Math.PI*.60);
@@ -111,6 +128,41 @@ export function createRifleman(template,paletteName){
  const gear=new THREE.SkinnedMesh(gearGeometry,gearMaterial);gear.name='RiflemanArmor';root.add(gear);gear.bind(skeleton,body.bindMatrix);gear.castShadow=true;gear.receiveShadow=true;gear.frustumCulled=false;
  root.userData.rifleman={palette:paletteName,weapon,supportGrip,ownedGeometries,ownedMaterials};
  return root;
+}
+
+// Transfer each garment from its authored bind proportions to the existing
+// superhero bind pose. Bone names, not array order, define the correspondence.
+// Runtime deformation then uses the same skeleton as the head and armor.
+function fitGarments(root,body,templates,palette,ownedGeometries,ownedMaterials){
+ const target=body.skeleton,boneIndices=new Map(target.bones.map((b,i)=>[b.name,i]));
+ const targetBindInverse=body.bindMatrix.clone().invert();
+ for(const template of templates){template.updateMatrixWorld(true);template.traverse(source=>{
+  if(!source.isSkinnedMesh)return;
+  const geometry=source.geometry.clone(),positions=geometry.attributes.position,normals=geometry.attributes.normal;
+  const sourceIndices=geometry.attributes.skinIndex,weights=geometry.attributes.skinWeight;
+  const indices=new Uint16Array(sourceIndices.count*4),transforms=source.skeleton.bones.map((bone,i)=>{
+   const mapped=boneIndices.get(bone.name);if(mapped===undefined)throw new Error('Unmapped garment joint '+bone.name);
+   return new THREE.Matrix4().copy(targetBindInverse).multiply(target.bones[mapped].matrixWorld).multiply(source.skeleton.boneInverses[i]).multiply(source.bindMatrix);
+  });
+  const vertex=new THREE.Vector3(),normal=new THREE.Vector3(),p=new THREE.Vector3(),n=new THREE.Vector3(),outP=new THREE.Vector3(),outN=new THREE.Vector3();
+  for(let i=0;i<positions.count;i++){
+   vertex.fromBufferAttribute(positions,i);normal.fromBufferAttribute(normals,i);outP.set(0,0,0);outN.set(0,0,0);
+   for(let j=0;j<4;j++){const src=sourceIndices.getComponent(i,j),w=weights.getComponent(i,j);indices[i*4+j]=boneIndices.get(source.skeleton.bones[src].name);if(!w)continue;outP.addScaledVector(p.copy(vertex).applyMatrix4(transforms[src]),w);outN.addScaledVector(n.copy(normal).transformDirection(transforms[src]),w);}
+   positions.setXYZ(i,outP.x,outP.y,outP.z);outN.normalize();normals.setXYZ(i,outN.x,outN.y,outN.z);
+  }
+  geometry.setAttribute('skinIndex',new THREE.BufferAttribute(indices,4));geometry.computeBoundingBox();geometry.computeBoundingSphere();ownedGeometries.push(geometry);
+  const sourceMaterials=Array.isArray(source.material)?source.material:[source.material];
+  const materials=sourceMaterials.map(original=>{
+   const material=original.clone(),boots=source.name.includes('Feet');material.color.set(boots?palette.rubber:palette.cloth);material.roughness=.9;material.metalness=0;
+   material.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
+    vec4 sampledDiffuseColor=texture2D(map,vMapUv);
+    float detail=dot(sampledDiffuseColor.rgb,vec3(.2126,.7152,.0722));
+    diffuseColor.rgb*=mix(.45,1.35,detail);
+   #endif`)};
+   material.customProgramCacheKey=()=> 'rifleman-clothing-v1';ownedMaterials.push(material);return material;
+  });
+  const mesh=new THREE.SkinnedMesh(geometry,Array.isArray(source.material)?materials:materials[0]);mesh.name='Uniform_'+source.name;root.add(mesh);mesh.bind(target,body.bindMatrix);mesh.castShadow=true;mesh.receiveShadow=true;mesh.frustumCulled=false;
+ })}
 }
 
 export function disposeRifleman(root){const r=root.userData.rifleman;if(!r)return;for(const g of r.ownedGeometries)g.dispose();for(const m of r.ownedMaterials)m.dispose();}
