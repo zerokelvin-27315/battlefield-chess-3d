@@ -80,25 +80,53 @@ export function createRifleman(template,paletteName,garments=[]){
  }
  function plate(bone,size,xyz,color='plate',angles){attach(bone,new RoundedBoxGeometry(...size,1,.012),color,xyz,angles)}
  function ellipsoid(bone,size,xyz,color='plate',start=0,length=Math.PI){const g=new THREE.SphereGeometry(1,16,10,0,Math.PI*2,start,length);g.scale(...size);attach(bone,g,color,xyz)}
+ function panel(bone,width,height,depth,xyz,color='plate',curve=.025){
+  // A sampled shell keeps the bent front smooth instead of bending just the
+  // corner vertices of a large flat triangle (which leaves diagonal creases).
+  const w=width/2,h=height/2,cut=Math.min(width*.18,height*.16),rows=[-h,-h+cut,h-cut*1.8,h],widths=[w-cut,w,w,w-cut],columns=9,layer=rows.length*columns,vertices=[],indices=[];
+  for(let side=0;side<2;side++)for(let r=0;r<rows.length;r++)for(let c=0;c<columns;c++){
+   const x=widths[r]*(c/(columns-1)*2-1);vertices.push(x,rows[r],side*depth+curve*(1-(x/w)**2));
+  }
+  for(let side=0;side<2;side++)for(let r=0;r<rows.length-1;r++)for(let c=0;c<columns-1;c++){
+   const a=side*layer+r*columns+c,b=a+1,d=a+columns,e=d+1;indices.push(...(side?[a,b,d,b,e,d]:[a,d,b,b,d,e]));
+  }
+  const rim=[];for(let c=0;c<columns;c++)rim.push(c);for(let r=1;r<rows.length;r++)rim.push(r*columns+columns-1);for(let c=columns-2;c>=0;c--)rim.push((rows.length-1)*columns+c);for(let r=rows.length-2;r>0;r--)rim.push(r*columns);
+  for(let i=0;i<rim.length;i++){const a=rim[i],b=rim[(i+1)%rim.length];indices.push(a,b,a+layer,b,b+layer,a+layer);}
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(vertices.length/3*2),2));geometry.setIndex(indices);geometry.computeVertexNormals();attach(bone,geometry,color,xyz);
+ }
+ function shoulderStrap(x){
+  const path=[[1.35,.16],[1.43,.13],[1.475,.055],[1.475,-.035],[1.43,-.115],[1.35,-.15]],vertices=[],indices=[];
+  path.forEach(([y,z],i)=>{const before=path[Math.max(0,i-1)],after=path[Math.min(path.length-1,i+1)],dy=after[0]-before[0],dz=after[1]-before[1],length=Math.hypot(dy,dz),ny=-dz/length*.006,nz=dy/length*.006;vertices.push(x-.025,y+ny,z+nz,x+.025,y+ny,z+nz,x+.025,y-ny,z-nz,x-.025,y-ny,z-nz);});
+  for(let i=0;i<path.length-1;i++)for(let edge=0;edge<4;edge++){const a=i*4+edge,b=i*4+(edge+1)%4;indices.push(a,b,a+4,b,b+4,a+4)}
+  const end=(path.length-1)*4;indices.push(0,2,1,0,3,2,end,end+1,end+2,end,end+2,end+3);
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(path.length*8),2));g.setIndex(indices);g.computeVertexNormals();attach('spine_03',g,'webbing',[0,0,0]);
+  plate('spine_03',[.045,.032,.018],[x,1.405,.143],'metal',[-.3,0,0]);
+ }
  // Layered plate carrier, straps, webbing, magazine pouches and compact pack.
- plate('spine_03',[.35,.34,.13],[0,1.31,.105],'webbing');
- plate('spine_03',[.29,.27,.085],[0,1.33,.19]);
- plate('spine_03',[.23,.035,.015],[0,1.39,.239],'edge');
- for(const x of [-.135,.135])plate('spine_03',[.055,.17,.055],[x,1.49,.055],'webbing');
- for(const x of [-.10,0,.10]){plate('spine_02',[.085,.13,.065],[x,1.16,.18],'webbing');plate('spine_02',[.071,.025,.012],[x,1.205,.218],'edge');}
- plate('spine_03',[.28,.32,.13],[0,1.32,-.18],'webbing');
- plate('spine_03',[.23,.21,.07],[0,1.33,-.265]);
- plate('pelvis',[.32,.07,.22],[0,.99,-.025],'webbing');plate('pelvis',[.065,.047,.025],[0,.99,.095],'metal');
+ panel('spine_03',.33,.30,.035,[0,1.31,.105],'webbing',.035);
+ panel('spine_03',.275,.235,.024,[0,1.325,.15],'plate',.028);
+ plate('spine_03',[.12,.023,.012],[0,1.39,.203],'webbing');
+ for(const x of [-.127,.127])shoulderStrap(x);
+ for(const x of [-.085,0,.085]){plate('spine_02',[.072,.112,.045],[x,1.165,.165],'webbing');plate('spine_02',[.06,.02,.012],[x,1.205,.194],'plate');}
+ for(const y of [1.27,1.30])plate('spine_03',[.21,.009,.008],[0,y,.204],'webbing');
+ // Compact, tapered daypack with two pockets and compression webbing.
+ panel('spine_03',.25,.285,.07,[0,1.31,-.235],'webbing',-.025);
+ for(const x of [-.06,.06]){
+  plate('spine_03',[.103,.10,.045],[x,1.235,-.267],'webbing');
+  plate('spine_03',[.095,.018,.048],[x,1.277,-.27],'plate');
+ }
+ for(const x of [-.085,.085])plate('spine_03',[.018,.205,.012],[x,1.335,-.267],'rubber');
+ plate('spine_03',[.07,.018,.035],[0,1.459,-.19],'rubber');
+ plate('pelvis',[.31,.045,.21],[0,.99,-.025],'webbing');plate('pelvis',[.05,.033,.018],[0,.99,.087],'metal');
  for(const side of ['l','r']){
   const s=side==='l'?1:-1;
-  plate('upperarm_'+side,[.18,.12,.23],[s*.235,1.45,-.06]);
-  plate('upperarm_'+side,[.145,.025,.18],[s*.24,1.514,-.06],'edge');
-  plate('lowerarm_'+side,[.12,.12,.17],[s*.535,1.455,-.065],'webbing');
-  plate('lowerarm_'+side,[.13,.065,.13],[s*.49,1.49,-.065]);
-  plate('thigh_'+side,[.15,.25,.085],[s*.12,.80,.055]);
-  plate('thigh_'+side,[.17,.08,.105],[s*.12,.91,.005],'webbing');
-  plate('calf_'+side,[.155,.17,.10],[s*.114,.535,.02]);
-  plate('calf_'+side,[.12,.24,.065],[s*.114,.36,.018]);
+  ellipsoid('upperarm_'+side,[.10,.075,.10],[s*.245,1.46,-.055],'plate',0,Math.PI*.62);
+  plate('lowerarm_'+side,[.10,.075,.13],[s*.535,1.455,-.065],'webbing');
+  panel('lowerarm_'+side,.09,.10,.018,[s*.51,1.45,.005],'plate',.012);
+  panel('thigh_'+side,.12,.165,.022,[s*.12,.80,.063],'plate',.018);
+  plate('thigh_'+side,[.15,.035,.10],[s*.12,.86,.0],'webbing');
+  panel('calf_'+side,.125,.125,.024,[s*.114,.535,.038],'plate',.02);
+  panel('calf_'+side,.085,.15,.018,[s*.114,.37,.035],'plate',.012);
   if(!garments.length){
    plate('foot_'+side,[.18,.09,.29],[s*.114,.055,.01],'rubber');
    plate('foot_'+side,[.165,.075,.13],[s*.114,.11,.08]);
@@ -138,7 +166,7 @@ function fitGarments(root,body,templates,palette,ownedGeometries,ownedMaterials)
  const targetBindInverse=body.bindMatrix.clone().invert();
  for(const template of templates){template.updateMatrixWorld(true);template.traverse(source=>{
   if(!source.isSkinnedMesh)return;
-  const geometry=source.geometry.clone(),positions=geometry.attributes.position,normals=geometry.attributes.normal;
+  let geometry=source.geometry.clone();const positions=geometry.attributes.position,normals=geometry.attributes.normal;
   const sourceIndices=geometry.attributes.skinIndex,weights=geometry.attributes.skinWeight;
   const indices=new Uint16Array(sourceIndices.count*4),transforms=source.skeleton.bones.map((bone,i)=>{
    const mapped=boneIndices.get(bone.name);if(mapped===undefined)throw new Error('Unmapped garment joint '+bone.name);
@@ -148,9 +176,24 @@ function fitGarments(root,body,templates,palette,ownedGeometries,ownedMaterials)
   for(let i=0;i<positions.count;i++){
    vertex.fromBufferAttribute(positions,i);normal.fromBufferAttribute(normals,i);outP.set(0,0,0);outN.set(0,0,0);
    for(let j=0;j<4;j++){const src=sourceIndices.getComponent(i,j),w=weights.getComponent(i,j);indices[i*4+j]=boneIndices.get(source.skeleton.bones[src].name);if(!w)continue;outP.addScaledVector(p.copy(vertex).applyMatrix4(transforms[src]),w);outN.addScaledVector(n.copy(normal).transformDirection(transforms[src]),w);}
+   // Tailor only fitted garment vertices; retain the authored skin influences.
+   if(source.name.includes('Legs')&&outP.y<.65){const t=THREE.MathUtils.smoothstep(outP.y,.42,.65);outP.y-=.20*(1-t);}
+   if(source.name.includes('Peasant_Body')&&outP.y<1.06){outP.y=THREE.MathUtils.mapLinear(outP.y,.86,1.06,.98,1.06);outP.x*=.94;outP.z*=.94;}
    positions.setXYZ(i,outP.x,outP.y,outP.z);outN.normalize();normals.setXYZ(i,outN.x,outN.y,outN.z);
   }
-  geometry.setAttribute('skinIndex',new THREE.BufferAttribute(indices,4));geometry.computeBoundingBox();geometry.computeBoundingSphere();ownedGeometries.push(geometry);
+  geometry.setAttribute('skinIndex',new THREE.BufferAttribute(indices,4));
+  if(source.name.includes('Feet')){
+   // Remove the tall fantasy boot shafts. Trouser cuffs overlap the opening.
+   const index=geometry.index,kept=[],count=index?index.count:positions.count,groups=[];
+   for(let i=0;i<count;i+=3){const tri=[0,1,2].map(j=>index?index.getX(i+j):i+j);if(tri.every(v=>positions.getY(v)<.295)){
+    const materialIndex=geometry.groups.find(g=>i>=g.start&&i<g.start+g.count)?.materialIndex||0;
+    const last=groups.at(-1);if(last?.materialIndex===materialIndex)last.count+=3;else groups.push({start:kept.length,count:3,materialIndex});kept.push(...tri);
+   }}
+   const cropped=new THREE.BufferGeometry();
+   for(const [name,attribute] of Object.entries(geometry.attributes)){const array=new attribute.array.constructor(kept.length*attribute.itemSize);kept.forEach((v,i)=>{for(let c=0;c<attribute.itemSize;c++)array[i*attribute.itemSize+c]=attribute.array[v*attribute.itemSize+c]});cropped.setAttribute(name,new THREE.BufferAttribute(array,attribute.itemSize,attribute.normalized));}
+   for(const group of groups)cropped.addGroup(group.start,group.count,group.materialIndex);geometry.dispose();geometry=cropped;
+  }
+  geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();ownedGeometries.push(geometry);
   const sourceMaterials=Array.isArray(source.material)?source.material:[source.material];
   const materials=sourceMaterials.map(original=>{
    const material=original.clone(),boots=source.name.includes('Feet');material.color.set(boots?palette.rubber:palette.cloth);material.roughness=.9;material.metalness=0;

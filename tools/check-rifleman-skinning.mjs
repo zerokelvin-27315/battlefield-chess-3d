@@ -36,6 +36,13 @@ const originalInverses=inverseSnapshot(reference.scene);
 function build(palette,x){const visual=rifleman.createRifleman(reference.scene,palette,garments);rifleman.calibrateRiflemanWeapon(visual,ready);const rig=normalizeRig(visual,x,1);return {visual,...rig};}
 function renderedBody(actor){actor.wrapper.updateMatrixWorld(true);const v=new THREE.Vector3(),inverse=actor.wrapper.matrixWorld.clone().invert(),points=[];actor.visual.traverse(mesh=>{if(!mesh.isSkinnedMesh)return;mesh.skeleton.update();for(let i=0;i<mesh.geometry.attributes.position.count;i++){mesh.getVertexPosition(i,v);v.applyMatrix4(mesh.matrixWorld).applyMatrix4(inverse);assert(v.toArray().every(Number.isFinite));points.push(...v.toArray());}});return points;}
 const first=build('desert',-.6),beforeSecond=renderedBody(first),second=build('dark',.6);
+for(const actor of [first,second]){
+ const boots=actor.visual.getObjectByName('Uniform_Male_Ranger_Feet_Boots').geometry;
+ const trousers=actor.visual.getObjectByName('Uniform_Male_Ranger_Legs').geometry;
+ assert(boots.boundingBox.max.y<.2951,'Tall boot shafts must be removed');
+ assert(trousers.boundingBox.min.y<boots.boundingBox.max.y,'Trouser cuffs must overlap the shortened boots');
+ assert(boots.attributes.position.count>100,'Boot cropping must retain the feet');
+}
 function maxDifference(a,b){assert.equal(a.length,b.length);let maximum=0;for(let i=0;i<a.length;i++)maximum=Math.max(maximum,Math.abs(a[i]-b[i]));return maximum;}
 assert(JSON.stringify(inverseSnapshot(reference.scene))===JSON.stringify(originalInverses),'Building previews must not mutate template inverse bind matrices');
 const afterSecond=renderedBody(first);

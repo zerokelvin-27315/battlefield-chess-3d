@@ -139,3 +139,25 @@ immutability, repeated rebuilds, finite vertex coordinates, equivalent local
 deformation and bounded character extents pass. Offline front/rear geometry
 projections were inspected for coverage. Actual browser shading and iPhone
 performance remain unverified; previous cloud-browser verification timed out.
+
+## v0.9.3-preview: fitted tactical silhouette
+
+The chest carrier and limb pads use sampled curved shells with chamfered corners
+instead of large rectangular blocks. The shell grid prevents a diagonal crease
+that appears when bending only the corners of a triangulated flat plate.
+The chest is thinner, pads are smaller, shoulder guards are domed, and solid
+webbing follows the shoulder surface from chest to back instead of standing up.
+The daypack is narrower and tapered, with two external pockets and compression
+straps. Armor still merges into the existing single skinned equipment mesh.
+
+The lower tunic vertices are lifted/tapered toward the belt, trouser cuffs extend
+down the calf, and boot triangles above y=.295 in the fitted rest pose are removed.
+Boot attributes and material groups are compacted together; the trousers overlap
+the new opening. Skin weights and joint names remain unchanged. No source glTF,
+texture, clip, or cached template is modified.
+
+The regression includes boot retention/cuff overlap assertions plus all six
+motion samples for both palettes. Front and rear offline geometry projections
+were inspected. These checks cover geometry/deformation, not browser shading or
+physical iPhone performance. Both module URLs carry the new preview version to
+avoid retaining an older rifleman module in a mobile browser cache.
