@@ -4,7 +4,7 @@ import {Chess} from 'https://esm.sh/chess.js@1.0.0';
 import {GLTFLoader} from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
 
 import {cloneRig,createRifleman,disposeRifleman,calibrateRiflemanWeapon,updateRiflemanGrip} from './rifleman.js?v=0.9.3-preview';
-import {DEATH_SEQUENCES,isDeathSequence,registerRagdollClips,getPreviewClip,playPreviewClip,seekPreviewClip} from './death-sequences.js?v=0.9.5-preview';
+import {DEATH_SEQUENCES,isDeathSequence,registerRagdollClips,getPreviewClip,playPreviewClip,seekPreviewClip} from './death-sequences.js?v=0.9.6-preview';
 
 const TYPES={p:'Private',r:'Radio operator',n:'Grenadier',b:'Machine gunner',q:'Sniper',k:'General'};
 const SYMBOL={w:{p:'♙',r:'♖',n:'♘',b:'♗',q:'♕',k:'♔'},b:{p:'♟',r:'♜',n:'♞',b:'♝',q:'♛',k:'♚'}};
@@ -683,7 +683,7 @@ function buildRiflemen(){
 function loadRiflemen(){
  if(!ragdollData&&!ragdollLoading){
   ragdollLoading=true;
-  fetch('./assets/animations/ragdoll-deaths.json?v=0.9.5-preview').then(response=>{if(!response.ok)throw new Error('Death animation download failed');return response.json()}).then(data=>{ragdollLoading=false;ragdollData=data;buildRiflemen()}).catch(error=>{ragdollLoading=false;status('Death animations failed to load; reopen Preview studio to retry');console.warn(error)});
+  fetch('./assets/animations/ragdoll-deaths.json?v=0.9.6-preview').then(response=>{if(!response.ok)throw new Error('Death animation download failed');return response.json()}).then(data=>{ragdollLoading=false;ragdollData=data;buildRiflemen()}).catch(error=>{ragdollLoading=false;status('Death animations failed to load; reopen Preview studio to retry');console.warn(error)});
  }
  if(!uniformTemplates&&!uniformLoading){
   uniformLoading=true;status('Loading rigged uniform…');
