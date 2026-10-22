@@ -233,3 +233,13 @@ still required; the existing Cloudflare preview workflow is unchanged.
 
 Engine references: https://github.com/pmndrs/cannon-es and
 https://pmndrs.github.io/cannon-es/docs/classes/ConeTwistConstraint.html
+
+### v0.9.6-preview: two-square chest-shot momentum
+
+The chest-shot simulation retains its upward/backward chest impulse and adds
+4.9 m/s of backward velocity across the body over the same 60 ms impact window.
+This carries the torso and trailing limbs backwards without adding excessive
+rotational torque. The pelvis settles approximately two board squares behind
+its starting point at the default 1.10 m preview height. One square is one world
+unit; validation measures the baked displacement through the production rig
+normalizer, with a tolerance of 0.1 square. Blast physics is unchanged.

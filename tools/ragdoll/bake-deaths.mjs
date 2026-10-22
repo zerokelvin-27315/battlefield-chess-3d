@@ -75,7 +75,13 @@ for(const name of ['DeathChest','DeathBlast']){
  // Spread each impact over 60 ms to keep constraint errors bounded while the
  // impacted body visibly moves first. The integrated impulse is unchanged.
  function impact(){if(world.time>=.06)return;const fraction=(1/360)/.06;
-  if(name==='DeathChest')bodies.get('chest').applyImpulse(new C.Vec3(0,145*fraction,-65*fraction));
+  if(name==='DeathChest'){
+   bodies.get('chest').applyImpulse(new C.Vec3(0,145*fraction,-65*fraction));
+   // Carry the full body backwards without adding a second chest torque.
+   // 4.9 m/s in source-rig space gives a two-square pelvis displacement
+   // after the production 1.10 m preview normalization (one square = 1 unit).
+   for(const physical of bodies.values())physical.applyImpulse(new C.Vec3(0,0,-physical.mass*4.9*fraction));
+  }
   else for(const s of ['l','r']){bodies.get('calf_'+s).applyImpulse(new C.Vec3(0,8*fraction,-32*fraction));bodies.get('foot_'+s).applyImpulse(new C.Vec3(0,3*fraction,-12*fraction));}
  }
  const weapon=visual.userData.rifleman.weapon,weaponOffset=new THREE.Vector3(0,.04,.16);let weaponBody=null;

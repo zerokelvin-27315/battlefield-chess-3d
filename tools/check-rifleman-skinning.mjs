@@ -48,6 +48,9 @@ const originalInverses=inverseSnapshot(reference.scene);
 function build(palette,x){const visual=rifleman.createRifleman(reference.scene,palette,garments);rifleman.calibrateRiflemanWeapon(visual,ready);const rig=normalizeRig(visual,x,1);return {visual,...rig};}
 function renderedBody(actor){actor.wrapper.updateMatrixWorld(true);const v=new THREE.Vector3(),inverse=actor.wrapper.matrixWorld.clone().invert(),points=[];actor.visual.traverse(mesh=>{if(!mesh.isSkinnedMesh)return;mesh.skeleton.update();for(let i=0;i<mesh.geometry.attributes.position.count;i++){mesh.getVertexPosition(i,v);v.applyMatrix4(mesh.matrixWorld).applyMatrix4(inverse);assert(v.toArray().every(Number.isFinite));points.push(...v.toArray());}});return points;}
 const first=build('desert',-.6),beforeSecond=renderedBody(first),second=build('dark',.6);
+const chestTravel=(chestMotion['0.00'].pelvis[2]-chestMotion['3.60'].pelvis[2])*first.scale;
+console.log('Chest-shot travel in board squares:',chestTravel.toFixed(3),'preview scale',first.scale);
+assert(Math.abs(chestTravel-2)<.1,'Chest shot must carry the model two board squares backwards at default scale');
 for(const actor of [first,second]){
  const boots=actor.visual.getObjectByName('Uniform_Male_Ranger_Feet_Boots').geometry;
  const trousers=actor.visual.getObjectByName('Uniform_Male_Ranger_Legs').geometry;
