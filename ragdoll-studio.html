@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="theme-color" content="#101923"/>
+  <title>Ragdoll Studio · Battlefield Chess 3D</title>
+  <link rel="stylesheet" href="./ragdoll-studio.css?v=0.9.7-preview"/>
+</head>
+<body>
+  <header><div><span class="eyebrow">BATTLEFIELD CHESS 3D</span><h1>Ragdoll studio <span class="version">v0.9.7</span></h1></div><a href="./">Back to game ↗</a></header>
+  <main>
+    <section id="stage" aria-label="3D animation preview">
+      <div id="canvas"></div>
+      <div class="stage-top"><span class="pill">1 grid cell = 1 board square</span><button id="panelToggle" aria-expanded="true">Hide settings</button></div>
+      <div class="view-buttons" aria-label="Camera views"><button data-view="perspective" class="active">Orbit</button><button data-view="side">Side</button><button data-view="front">Front</button><button data-view="top">Top</button><button id="frameView">Fit</button></div>
+      <div class="stage-bottom"><div id="result" aria-live="polite">Loading the rifleman…</div><div class="transport"><button id="replay" disabled title="Restart animation">↺ Replay</button><button id="play" disabled>Play</button><label class="rate">Speed <select id="speed"><option value="0.25">¼×</option><option value="0.5">½×</option><option value="1" selected>1×</option></select></label><label class="loop"><input type="checkbox" id="loop"/> Loop</label></div><div class="scrub"><input id="timeline" type="range" min="0" max="3.6" step="0.01" value="0" disabled aria-label="Animation time"/><output id="time">0.00 / 3.60 s</output></div></div>
+      <div id="loading" role="status"><strong>Preparing the studio</strong><span id="loadMessage">Loading character and physics engine…</span></div>
+    </section>
+    <aside id="panel" aria-label="Ragdoll settings">
+      <div class="panel-heading"><div><span class="eyebrow">ANIMATION LAB</span><h2>Shape the impact.</h2></div><span class="pill">65-joint rig</span></div>
+      <p class="intro">Tune a shot, simulate it, then replay or scrub the result. Copy the tested settings back into our chat to bake your custom animation.</p>
+      <div class="presets" aria-label="Starting presets"><button data-preset="chest" class="active">Chest launch</button><button data-preset="blast">Leg blast</button><button data-preset="collapse">Collapse</button></div>
+      <label class="field">Sequence name<input id="sequenceName" type="text" maxlength="80" value="Chest launch · two squares"/></label>
+      <div class="appearance"><label>Uniform <select id="palette"><option value="desert">Desert</option><option value="dark">Dark</option></select></label><label><input id="showPath" type="checkbox" checked/> Travel path</label></div>
+      <section class="setting-section"><div class="section-title"><h3>Impacts</h3><button id="addImpact" class="subtle">+ Add hit</button></div><p class="hint">X = sideways · Y = upward · Z = forward. Negative Z throws the body back. Impulses use N·s on the full-size authoring rig.</p><div id="impacts"></div></section>
+      <section class="setting-section"><h3>Body momentum</h3><p class="hint">Launch the entire body without adding more spin. Chest launch combines this with a separate chest hit.</p><div id="momentumControls"></div></section>
+      <details open><summary>Body & floor</summary><div id="physicsControls"></div><label class="check-row"><input id="releaseWeapon" type="checkbox" checked/> Release rifle</label><div id="weaponControls"></div></details>
+      <details><summary>Copy or import a preset</summary><p class="hint">Only a simulated, unchanged preset can be copied. Paste a previous preset below to restore it.</p><div class="export-buttons"><button id="copySettings" disabled>Copy settings</button><button id="downloadSettings" disabled>Download JSON</button></div><label class="field">Settings JSON<textarea id="presetJson" spellcheck="false" rows="7" placeholder="Copied settings appear here. You can also paste a preset to import."></textarea></label><button id="importSettings">Import & simulate</button><p id="exportStatus" class="hint" role="status"></p></details>
+      <div class="run-bar"><div id="status" role="status" aria-live="polite">Loading…</div><progress id="progress" max="1" value="0" hidden></progress><div class="run-buttons"><button id="simulate" class="primary" disabled>Simulate & preview</button><button id="cancel" hidden>Cancel</button></div></div>
+      <p class="footnote">Simulation runs when you press Simulate. Playback uses the resulting baked motion. The battlefield keeps its existing performance.</p>
+    </aside>
+  </main>
+  <script type="module" src="./ragdoll-studio.js?v=0.9.7-preview"></script>
+</body>
+</html>
