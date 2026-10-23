@@ -234,6 +234,19 @@ still required; the existing Cloudflare preview workflow is unchanged.
 Engine references: https://github.com/pmndrs/cannon-es and
 https://pmndrs.github.io/cannon-es/docs/classes/ConeTwistConstraint.html
 
+### v0.9.8-preview: remove covered body surfaces
+
+The garmented body's height crop accidentally retained the upper surfaces of
+T-pose shoulders and arms. These hidden body triangles intersected the uniform
+and appeared as pale patches at shoulders and elbows. The exposed body now also
+requires head/neck skin influence and rejects arm influences. Neck vertices keep
+their natural clavicle/spine blend inside the collar.
+Original head and neck skin remain; garments provide the covered body surfaces. Skin
+weights, bone transforms, garment meshes, armor, and animations are unchanged.
+Regression checks reject retained limb skin in both palettes and confirm head
+geometry is still present. The shared physics solver still reproduces the
+published chest/blast clips exactly.
+
 ### v0.9.6-preview: two-square chest-shot momentum
 
 The chest-shot simulation retains its upward/backward chest impulse and adds

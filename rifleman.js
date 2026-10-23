@@ -42,11 +42,19 @@ export function createRifleman(template,paletteName,garments=[]){
  }
  bodyGeometry.setAttribute('color',new THREE.BufferAttribute(colors,3));bodyGeometry.setAttribute('faceMask',new THREE.BufferAttribute(mask,1));body.geometry=bodyGeometry;
  if(garments.length){
-  // Outfits include their own body coverage. Keep just the original head/neck,
-  // compacting all attributes so precise bounds also exclude the hidden body.
+  // Outfits include their own body coverage. A height-only crop also retained
+  // the tops of T-pose shoulders/arms, which then poked through the sleeves.
+  // Keep head/neck influences only, compacting every attribute and bounds.
   const kept=[],position=bodyGeometry.attributes.position,index=bodyGeometry.index;
   const count=index?index.count:position.count;
-  for(let i=0;i<count;i+=3){const tri=[0,1,2].map(j=>index?index.getX(i+j):i+j);if(tri.every(v=>position.getY(v)>1.47))kept.push(...tri);}
+  function exposedHead(vertex){
+   if(position.getY(vertex)<=1.47||mask[vertex]<=.25)return false;
+   // Neck skin legitimately blends with clavicles/spine; reject actual arm
+   // influences rather than removing that natural neck/collar transition.
+   for(let j=0;j<4;j++){const bone=skeleton.bones[indices.getComponent(vertex,j)]?.name||'';if(/^(upperarm|lowerarm|hand|finger)/.test(bone)&&weights.getComponent(vertex,j)>=.001)return false;}
+   return true;
+  }
+  for(let i=0;i<count;i+=3){const tri=[0,1,2].map(j=>index?index.getX(i+j):i+j);if(tri.every(exposedHead))kept.push(...tri);}
   const head=new THREE.BufferGeometry();
   for(const [name,attribute] of Object.entries(bodyGeometry.attributes)){
    const array=new attribute.array.constructor(kept.length*attribute.itemSize);

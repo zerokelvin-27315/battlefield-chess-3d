@@ -52,6 +52,14 @@ const chestTravel=(chestMotion['0.00'].pelvis[2]-chestMotion['3.60'].pelvis[2])*
 console.log('Chest-shot travel in board squares:',chestTravel.toFixed(3),'preview scale',first.scale);
 assert(Math.abs(chestTravel-2)<.1,'Chest shot must carry the model two board squares backwards at default scale');
 for(const actor of [first,second]){
+ const exposedBody=actor.visual.getObjectByName('SuperHero_Male'),exposedGeometry=exposedBody.geometry;
+ assert(exposedGeometry.attributes.position.count>100,'Head/neck skin must remain visible');
+ for(let i=0;i<exposedGeometry.attributes.position.count;i++){
+  let headWeight=0,armWeight=0;
+  for(let j=0;j<4;j++){const bone=exposedBody.skeleton.bones[exposedGeometry.attributes.skinIndex.getComponent(i,j)].name,w=exposedGeometry.attributes.skinWeight.getComponent(i,j);if(/^(Head|neck_01)$/.test(bone))headWeight+=w;if(/^(upperarm|lowerarm|hand|finger)/.test(bone))armWeight+=w;}
+  assert(headWeight>.25&&armWeight<.001,'Clothed riflemen must retain head/neck skin without covered arm surfaces');
+ }
+ exposedGeometry.computeBoundingBox();assert(exposedGeometry.boundingBox.min.y<1.53,'Neck must extend into the collar rather than leaving a floating head');
  const boots=actor.visual.getObjectByName('Uniform_Male_Ranger_Feet_Boots').geometry;
  const trousers=actor.visual.getObjectByName('Uniform_Male_Ranger_Legs').geometry;
  assert(boots.boundingBox.max.y<.2951,'Tall boot shafts must be removed');

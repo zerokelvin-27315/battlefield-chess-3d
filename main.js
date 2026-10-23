@@ -3,7 +3,7 @@ import {OrbitControls} from 'https://esm.sh/three@0.169.0/examples/jsm/controls/
 import {Chess} from 'https://esm.sh/chess.js@1.0.0';
 import {GLTFLoader} from 'https://esm.sh/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
 
-import {cloneRig,createRifleman,disposeRifleman,calibrateRiflemanWeapon,updateRiflemanGrip} from './rifleman.js?v=0.9.3-preview';
+import {cloneRig,createRifleman,disposeRifleman,calibrateRiflemanWeapon,updateRiflemanGrip} from './rifleman.js?v=0.9.8-preview';
 import {DEATH_SEQUENCES,isDeathSequence,registerRagdollClips,getPreviewClip,playPreviewClip,seekPreviewClip} from './death-sequences.js?v=0.9.6-preview';
 
 const TYPES={p:'Private',r:'Radio operator',n:'Grenadier',b:'Machine gunner',q:'Sniper',k:'General'};
